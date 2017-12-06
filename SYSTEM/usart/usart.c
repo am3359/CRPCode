@@ -31,18 +31,18 @@ int fputc(int ch, FILE *f)
 }
 #endif
  
-#if EN_USART1_RX   //如果使能了接收
+#if EN_USART_RX   //如果使能了接收
 //串口1中断服务程序
 //注意,读取USARTx->SR能避免莫名其妙的错误   	
-u8 USART_RX_BUF[USART_REC_LEN];     //接收缓冲,最大USART_REC_LEN个字节.
+u8 COM_RX_BUF[COM_REC_LEN];     //接收缓冲,最大COM_REC_LEN个字节.
 //接收状态
 //bit15，	接收完成标志
 //bit14，	接收到0x0d
 //bit13~0，	接收到的有效字节数目
-u16 USART_RX_STA=0;       //接收状态标记	
+u16 COM_RX_STA=0;       //接收状态标记	
 
-u8 USART3_RX_BUF[USART3_REC_LEN];     //接收缓冲,最大USART3_REC_LEN个字节.
-u16 USART3_RX_STA=0;       //接收状态标记	
+u8 HMI_RX_BUF[HMI_REC_LEN];     //接收缓冲,最大HMI_REC_LEN个字节.
+u16 HMI_RX_STA=0;       //接收状态标记	
 
 
 //初始化IO 串口1 
@@ -103,54 +103,54 @@ void USART1_IRQHandler(void)                	//串口1中断服务程序
 	{
 		Res =USART_ReceiveData(USART1);//(USART1->DR);	//读取接收到的数据
 		
-		if((USART_RX_STA & 0x8000)==0)//接收未完成
+		if((COM_RX_STA & 0x8000)==0)//接收未完成
 		{
-			if(USART_RX_STA & 0x4000)//接收到了0x0D
+			if(COM_RX_STA & 0x4000)//接收到了0x0D
 			{
 				if(Res==0x0a)
 				{//接收完成了 
-					USART_RX_STA|=0x8000;
+					COM_RX_STA|=0x8000;
 				}
 				else
 				{//接收错误,重新开始
-					USART_RX_STA=0;	
-					memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+					COM_RX_STA=0;	
+					memset(COM_RX_BUF,0,COM_REC_LEN);//清除数据接收缓冲区COM_RX_BUF,用于下一次数据接收
 				}
 			}
 			else //还没收到0X0D
 			{	
 				if(Res==0x0d)
 				{//收到0X0D
-					USART_RX_STA|=0x4000;
+					COM_RX_STA|=0x4000;
 				}
 				else
 				{//不是0X0D保持数据
-					USART_RX_BUF[USART_RX_STA & 0X3FFF]=Res ;
-					USART_RX_STA++;
-					if((USART_RX_STA & 0X3FFF)>(USART_REC_LEN-1))//if(USART_RX_STA>(USART_REC_LEN-1))
+					COM_RX_BUF[COM_RX_STA & 0X3FFF]=Res ;
+					COM_RX_STA++;
+					if((COM_RX_STA & 0X3FFF)>(COM_REC_LEN-1))//if(COM_RX_STA>(COM_REC_LEN-1))
 					{//接收数据错误,重新开始接收
-						USART_RX_STA=0;	
-						memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+						COM_RX_STA=0;	
+						memset(COM_RX_BUF,0,COM_REC_LEN);//清除数据接收缓冲区COM_RX_BUF,用于下一次数据接收
 					}
 				}
 			}
 		}
 
-		if((USART_RX_STA & 0x8000)&&(Com_Queue!=NULL))
+		if((COM_RX_STA & 0x8000)&&(Com_Queue!=NULL))
 		{//向队列发送接收到的数据
-			if((USART_RX_STA & 0X3FFF)>0)
+			if((COM_RX_STA & 0X3FFF)>0)
 			{//长度超过1个字节才发送
-				xQueueSendFromISR(Com_Queue,USART_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
+				xQueueSendFromISR(Com_Queue,COM_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
 				
-				USART_RX_STA=0;	
-				memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+				COM_RX_STA=0;	
+				memset(COM_RX_BUF,0,COM_REC_LEN);//清除数据接收缓冲区COM_RX_BUF,用于下一次数据接收
 					
 				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);//如果需要的话进行一次任务切换
 			}
 			else
 			{
-				USART_RX_STA=0;	
-				memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+				COM_RX_STA=0;	
+				memset(COM_RX_BUF,0,COM_REC_LEN);//清除数据接收缓冲区COM_RX_BUF,用于下一次数据接收
 			}
 		}
 	}
@@ -212,39 +212,39 @@ void USART3_IRQHandler(void)                	//串口3中断服务程序
 	{
 		Res =USART_ReceiveData(USART3);//(USART3->DR);	//读取接收到的数据
 		
-		if((USART_RX_STA & 0xc000)!=0xc000)//接收未完成
+		if((COM_RX_STA & 0xc000)!=0xc000)//接收未完成
 		{
-			USART3_RX_BUF[USART3_RX_STA & 0X3FFF]=Res ;
-			USART3_RX_STA++;
+			HMI_RX_BUF[HMI_RX_STA & 0X3FFF]=Res ;
+			HMI_RX_STA++;
 
-			if(Res == 0xff) USART3_RX_STA += 0x4000;
-			else USART3_RX_STA &= 0X3FFF;
+			if(Res == 0xff) HMI_RX_STA += 0x4000;
+			else HMI_RX_STA &= 0X3FFF;
 
-			if((USART3_RX_STA & 0X3FFF)>(USART3_REC_LEN-1))
+			if((HMI_RX_STA & 0X3FFF)>(HMI_REC_LEN-1))
 			{
-				USART3_RX_STA=0;//接收数据错误,重新开始接收
-				memset(USART3_RX_BUF,0,USART3_REC_LEN);
+				HMI_RX_STA=0;//接收数据错误,重新开始接收
+				memset(HMI_RX_BUF,0,HMI_REC_LEN);
 			}
 		}
 		
-		if(((USART3_RX_STA & 0xc000)==0xc000)&&(Hmi_Queue!=NULL))
+		if(((HMI_RX_STA & 0xc000)==0xc000)&&(Hmi_Queue!=NULL))
 		{//向队列发送接收到的数据
-			if((USART3_RX_STA & 0X3FFF)>3)
+			if((HMI_RX_STA & 0X3FFF)>3)
 			{//除了0xff 0xff 0xff长度超过1个字节才发送
-				USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-3]=0;
-				//USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-2]=0;
-				//USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-1]=0;
-				xQueueSendFromISR(Hmi_Queue,USART3_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
+				HMI_RX_BUF[(HMI_RX_STA & 0X3FFF)-3]=0;
+				//HMI_RX_BUF[(HMI_RX_STA & 0X3FFF)-2]=0;
+				//HMI_RX_BUF[(HMI_RX_STA & 0X3FFF)-1]=0;
+				xQueueSendFromISR(Hmi_Queue,HMI_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
 				
-				USART3_RX_STA=0;	
-				memset(USART3_RX_BUF,0,USART3_REC_LEN);//清除数据接收缓冲区USART3_RX_BUF,用于下一次数据接收
+				HMI_RX_STA=0;	
+				memset(HMI_RX_BUF,0,HMI_REC_LEN);//清除数据接收缓冲区HMI_RX_BUF,用于下一次数据接收
 			
 				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);//如果需要的话进行一次任务切换
 			}
 			else
 			{
-				USART3_RX_STA=0;	
-				memset(USART3_RX_BUF,0,USART3_REC_LEN);//清除数据接收缓冲区USART3_RX_BUF,用于下一次数据接收
+				HMI_RX_STA=0;	
+				memset(HMI_RX_BUF,0,HMI_REC_LEN);//清除数据接收缓冲区HMI_RX_BUF,用于下一次数据接收
 			}
 		}
 		
