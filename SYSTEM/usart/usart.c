@@ -1,5 +1,6 @@
 #include "sys.h"
 #include "usart.h"	
+#include "string.h"
 //如果使用ucos,则包括下面的头文件即可.
 #if SYSTEM_SUPPORT_OS
 #include "FreeRTOS.h"					//FreeRTOS使用
@@ -40,6 +41,10 @@ u8 USART_RX_BUF[USART_REC_LEN];     //接收缓冲,最大USART_REC_LEN个字节.
 //bit13~0，	接收到的有效字节数目
 u16 USART_RX_STA=0;       //接收状态标记	
 
+u8 USART3_RX_BUF[USART3_REC_LEN];     //接收缓冲,最大USART3_REC_LEN个字节.
+u16 USART3_RX_STA=0;       //接收状态标记	
+
+
 //初始化IO 串口1 
 //bound:波特率
 void UART1_Init(u32 bound){
@@ -75,50 +80,82 @@ void UART1_Init(u32 bound){
 	USART_Cmd(USART1, ENABLE);  //使能串口1 
 	
 	//USART_ClearFlag(USART1, USART_FLAG_TC);
-	
-#if EN_USART1_RX	
+		
 	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);//开启相关中断
 
 	//Usart1 NVIC 配置
 	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;//串口1中断通道
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3;//抢占优先级3
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority =3;		//子优先级3
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=7;//抢占优先级7
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority =0;		//子优先级0
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
 	NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器、
-
-#endif
 	
 }
 
+extern QueueHandle_t Com_Queue;	//信息队列句柄
 
 void USART1_IRQHandler(void)                	//串口1中断服务程序
-{
+{//以0x0D 0x0A 结尾
 	u8 Res;
-	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)  //接收中断(接收到的数据必须是0x0d 0x0a结尾)
+	BaseType_t xHigherPriorityTaskWoken;
+	
+	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)  //接收中断(接收到的数据必须是0x0D 0x0A结尾)
 	{
 		Res =USART_ReceiveData(USART1);//(USART1->DR);	//读取接收到的数据
 		
-		if((USART_RX_STA&0x8000)==0)//接收未完成
+		if((USART_RX_STA & 0x8000)==0)//接收未完成
 		{
-			if(USART_RX_STA&0x4000)//接收到了0x0d
+			if(USART_RX_STA & 0x4000)//接收到了0x0D
 			{
-				if(Res!=0x0a)USART_RX_STA=0;//接收错误,重新开始
-				else USART_RX_STA|=0x8000;	//接收完成了 
+				if(Res==0x0a)
+				{//接收完成了 
+					USART_RX_STA|=0x8000;
+				}
+				else
+				{//接收错误,重新开始
+					USART_RX_STA=0;	
+					memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+				}
 			}
 			else //还没收到0X0D
 			{	
-				if(Res==0x0d)USART_RX_STA|=0x4000;
+				if(Res==0x0d)
+				{//收到0X0D
+					USART_RX_STA|=0x4000;
+				}
 				else
-				{
-					USART_RX_BUF[USART_RX_STA&0X3FFF]=Res ;
+				{//不是0X0D保持数据
+					USART_RX_BUF[USART_RX_STA & 0X3FFF]=Res ;
 					USART_RX_STA++;
-					if(USART_RX_STA>(USART_REC_LEN-1))USART_RX_STA=0;//接收数据错误,重新开始接收	  
-				}		 
+					if((USART_RX_STA & 0X3FFF)>(USART_REC_LEN-1))//if(USART_RX_STA>(USART_REC_LEN-1))
+					{//接收数据错误,重新开始接收
+						USART_RX_STA=0;	
+						memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+					}
+				}
 			}
-		}   		 
-	} 
+		}
+
+		if((USART_RX_STA & 0x8000)&&(Com_Queue!=NULL))
+		{//向队列发送接收到的数据
+			if((USART_RX_STA & 0X3FFF)>0)
+			{//长度超过1个字节才发送
+				xQueueSendFromISR(Com_Queue,USART_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
+				
+				USART_RX_STA=0;	
+				memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+					
+				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);//如果需要的话进行一次任务切换
+			}
+			else
+			{
+				USART_RX_STA=0;	
+				memset(USART_RX_BUF,0,USART_REC_LEN);//清除数据接收缓冲区USART_RX_BUF,用于下一次数据接收
+			}
+		}
+	}
 } 
-#endif	
+
 
 void USART3_Init(u32 bound){
    //GPIO端口设置
@@ -152,34 +189,72 @@ void USART3_Init(u32 bound){
 	
 	USART_Cmd(USART3, ENABLE);  //使能串口1 
 	
-	USART_ClearFlag(USART3, USART_FLAG_TC);
+	//USART_ClearFlag(USART3, USART_FLAG_TC);
 		
 	USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);//开启相关中断
 
 	//USART3 NVIC 配置
 	NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;//串口1中断通道
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3;//抢占优先级3
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority =3;		//子优先级2
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=8;//抢占优先级8
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority =0;		//子优先级0
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
 	NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器、
 }
 
+extern QueueHandle_t Hmi_Queue;	//信息队列句柄
+
 void USART3_IRQHandler(void)                	//串口3中断服务程序
-{
+{//以0xff 0xff 0xff结尾
 	u8 Res;
+	BaseType_t xHigherPriorityTaskWoken;
 
 	if(USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)  //接收中断(接收到的数据必须是0x0d 0x0a结尾)
 	{
 		Res =USART_ReceiveData(USART3);//(USART3->DR);	//读取接收到的数据
 		
-		USART_SendData(USART1,Res);
+		if((USART_RX_STA & 0xc000)!=0xc000)//接收未完成
+		{
+			USART3_RX_BUF[USART3_RX_STA & 0X3FFF]=Res ;
+			USART3_RX_STA++;
+
+			if(Res == 0xff) USART3_RX_STA += 0x4000;
+			else USART3_RX_STA &= 0X3FFF;
+
+			if((USART3_RX_STA & 0X3FFF)>(USART3_REC_LEN-1))
+			{
+				USART3_RX_STA=0;//接收数据错误,重新开始接收
+				memset(USART3_RX_BUF,0,USART3_REC_LEN);
+			}
+		}
 		
+		if(((USART3_RX_STA & 0xc000)==0xc000)&&(Hmi_Queue!=NULL))
+		{//向队列发送接收到的数据
+			if((USART3_RX_STA & 0X3FFF)>3)
+			{//除了0xff 0xff 0xff长度超过1个字节才发送
+				USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-3]=0;
+				//USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-2]=0;
+				//USART3_RX_BUF[(USART3_RX_STA & 0X3FFF)-1]=0;
+				xQueueSendFromISR(Hmi_Queue,USART3_RX_BUF,&xHigherPriorityTaskWoken);//向队列中发送数据
+				
+				USART3_RX_STA=0;	
+				memset(USART3_RX_BUF,0,USART3_REC_LEN);//清除数据接收缓冲区USART3_RX_BUF,用于下一次数据接收
+			
+				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);//如果需要的话进行一次任务切换
+			}
+			else
+			{
+				USART3_RX_STA=0;	
+				memset(USART3_RX_BUF,0,USART3_REC_LEN);//清除数据接收缓冲区USART3_RX_BUF,用于下一次数据接收
+			}
+		}
+		
+	}
 //65 01 01 01 FF FF FF 
 //65 01 02 01 FF FF FF 
 //65 01 03 01 FF FF FF 
 //65 01 04 01 FF FF FF 
 //70 31 32 33 34 FF FF FF 
-	}
+
 }
 
 u8 Uart3_PutChar(u8 ch)
@@ -201,3 +276,4 @@ void Uart3_PutString(char * buf , u8 len)
     }
 }
 
+#endif
