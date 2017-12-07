@@ -53,6 +53,7 @@ QueueHandle_t Com_Queue;    //串口信息队列句柄
 QueueHandle_t Hmi_Queue;    //HMI信息队列句柄
 
 #define COM_WAIT   1       //等待com命令
+#define COM_INST   2       //com命令(instruct)解析
 
 #define HMI_WAIT   1       //等待hmi命令
 
@@ -106,53 +107,37 @@ void start_task(void *pvParameters)
 //com_task任务函数
 void com_task(void *pvParameters)
 {//uart1通讯
-    u32 PreviousState = 0;
-    u32 CurrentState  = 0;
-    u32 NextState     = 0;
+    //u32 PreviousState = 0;
+    //u32 CurrentState  = 0;
+    //u32 NextState     = 0;
     
     u8 buffer[COM_REC_LEN];
     BaseType_t err;
+
     
     while(1)
     {
-        switch(CurrentState)
+        if(Com_Queue!=NULL)
         {
-//            case 0:
-//                CurrentState = COM_WAIT;
-//                NextState    = COM_WAIT;
-//                break;
-            case COM_WAIT:
-                STATE_ENTRY_ACTION
+            memset(buffer,0,COM_REC_LEN);    //清除缓冲区
 
+            err=xQueueReceive(Com_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+            if(err==pdTRUE)
+            {//串口命令解析
 
-                STATE_TRANSITION_TEST
-                    if(Com_Queue!=NULL)
-                    {
-                        memset(buffer,0,COM_REC_LEN);    //清除缓冲区
-                
-                        
-                        err=xQueueReceive(Com_Queue,buffer,10);//采用非阻塞式
-                        if(err==pdTRUE)
-                        {//串口命令解析
-                            //if(??)  NextState = ??;
-                            //printf("Received string:%s\r\n",buffer);
-//阀       Vnnb（4字节）                 V（1字节）
-//步进电机 Snncpppp（8字节）             S（1字节）
-//蠕动泵   Pnnktttt（8字节）             P（1字节）
-//旋转泵   Rnnctttt（8字节）             R（1字节）
-//温度     Tnnb（4字节）                 T（1字节）
-//延时     Dxxxxxxx（8字节）             D（1字节）
-//时间     N0YYMMDDWWHHMMSS（16字节）    N（1字节）
-                        }
-                    }
-                STATE_EXIT_ACTION
+    //阀       Vnnb（4字节）                 V（1字节）
+    //步进电机 Snncpppp（8字节）             S（1字节）
+    //蠕动泵   Pnnktttt（8字节）             P（1字节）
+    //旋转泵   Rnnctttt（8字节）             R（1字节）
+    //温度     Tnnb（4字节）                 T（1字节）
+    //延时     Wxxxxxxx（8字节）             W（1字节）
+    //日期     D0YYMMDD（8字节）             D（1字节）
+    //时间     N0HHMMSS（8字节）             N（1字节）
 
-                STATE_END
-            default:
-                CurrentState = COM_WAIT;
-                NextState    = COM_WAIT;
-                break;
+            //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
+            //(P0130020)
 
+            }
         }
         
 
