@@ -48,7 +48,7 @@ TaskHandle_t Start_Task_Handler;
 void start_task(void *pvParameters);
 
 #define COM_Q_NUM   4       //发送数据的消息队列的数量 
-#define HMI_Q_NUM   4       //发送数据的消息队列的数量 
+#define HMI_Q_NUM   16      //发送数据的消息队列的数量 
 QueueHandle_t Com_Queue;    //串口信息队列句柄
 QueueHandle_t Hmi_Queue;    //HMI信息队列句柄
 
@@ -56,6 +56,9 @@ QueueHandle_t Hmi_Queue;    //HMI信息队列句柄
 #define COM_INST   2       //com命令(instruct)解析
 
 #define HMI_WAIT   1       //等待hmi命令
+
+u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
+u8 str_len(u8 *str);
 
 //------------------MAIN 开始------------------
 int main(void)
@@ -113,6 +116,12 @@ void com_task(void *pvParameters)
     
     u8 buffer[COM_REC_LEN];
     BaseType_t err;
+    
+    u8 c[8][2];//存位置和长度
+    u8 num;//存命令个数
+    u8 cmdtype;//命令类型，0无效数据，1非阻塞，2阻塞型
+    
+    u8 i;
 
     
     while(1)
@@ -124,24 +133,147 @@ void com_task(void *pvParameters)
             err=xQueueReceive(Com_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
             if(err==pdTRUE)
             {//串口命令解析
-
-    //阀       Vnnb（4字节）                 V（1字节）
-    //步进电机 Snncpppp（8字节）             S（1字节）
-    //蠕动泵   Pnnktttt（8字节）             P（1字节）
-    //旋转泵   Rnnctttt（8字节）             R（1字节）
-    //温度     Tnnb（4字节）                 T（1字节）
-    //延时     Wxxxxxxx（8字节）             W（1字节）
-    //日期     D0YYMMDD（8字节）             D（1字节）
-    //时间     N0HHMMSS（8字节）             N（1字节）
-
             //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
             //(P0130020)
-
+//                printf("%s\r\n",buffer);
+//                printf("字符长度:%d\r\n",str_len(buffer));
+//                memset(c,0,8*2);
+//                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
+//                printf("命令数:%d\r\n",num);
+//                printf("命令类型:%d\r\n",cmdtype);
+//                printf("命令1位置,长度:%d,%d\r\n",c[0][0],c[0][1]);
+//                printf("命令2位置,长度:%d,%d\r\n",c[1][0],c[1][1]);
+//                printf("命令3位置,长度:%d,%d\r\n",c[2][0],c[2][1]);
+//                printf("命令4位置,长度:%d,%d\r\n",c[3][0],c[3][1]);
+//                printf("命令5位置,长度:%d,%d\r\n",c[4][0],c[4][1]);
+//                printf("命令6位置,长度:%d,%d\r\n",c[5][0],c[5][1]);
+//                printf("命令7位置,长度:%d,%d\r\n",c[6][0],c[6][1]);
+//                printf("命令8位置,长度:%d,%d\r\n",c[7][0],c[7][1]);
+                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
+                if (cmdtype==1)
+                {//非阻塞命令
+                    for(i=0;i<num;i++)
+                    {
+                        switch(buffer[c[i][0]])
+                        {
+                            case 'd':
+                            case 'D':
+                                if (c[i][1]==1)
+                                {//查询日期
+                                }
+                                else if (c[i][1]==8)
+                                {//设置日期
+                                }
+                                break;
+                            case 'n':
+                            case 'N':
+                                if (c[i][1]==1)
+                                {//查询时间
+                                }
+                                else if (c[i][1]==8)
+                                {//设置时间
+                                }
+                                break;
+                            case 't':
+                            case 'T':
+                                if (c[i][1]==1)
+                                {//查询温度
+                                }
+                                else if (c[i][1]==4)
+                                {//设置温度
+                                }
+                                break;
+                            case 'v':
+                            case 'V':
+                                if (c[i][1]==1)
+                                {//查询阀状态
+                                }
+                                else if (c[i][1]==4)
+                                {//设置阀开关
+                                }
+                                break;
+                            case 's':
+                            case 'S':
+                                if (c[i][1]==1)
+                                {//查询步进电机状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置步进电机
+                                }
+                                break;
+                            case 'p':
+                            case 'P':
+                                if (c[i][1]==1)
+                                {//查询蠕动泵状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置蠕动泵
+                                }
+                                break;
+                            case 'r':
+                            case 'R':
+                                if (c[i][1]==1)
+                                {//查询旋转泵状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置旋转泵
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                }
+                else if (cmdtype==2)
+                {//阻塞命令
+                    for(i=0;i<num;i++)
+                    {
+                        switch(buffer[c[i][0]])
+                        {
+                            case 's':
+                            case 'S':
+                                if (c[i][1]==1)
+                                {//查询步进电机状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置步进电机
+                                }
+                                break;
+                            case 'p':
+                            case 'P':
+                                if (c[i][1]==1)
+                                {//查询蠕动泵状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置蠕动泵
+                                }
+                                break;
+                            case 'r':
+                            case 'R':
+                                if (c[i][1]==1)
+                                {//查询旋转泵状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置旋转泵
+                                }
+                                break;
+                            case 'w':
+                            case 'W':
+                                if (c[i][1]==1)
+                                {//查询延时状态
+                                }
+                                else if (c[i][1]==8)
+                                {//设置延时
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                }
             }
         }
         
-
-
         //vTaskDelay(10);
     }
 }
@@ -160,7 +292,7 @@ void hmi_task(void *pvParameters)
             err=xQueueReceive(Hmi_Queue,buffer,portMAX_DELAY);
             if(err==pdTRUE)
             {//HMI命令解析
-                printf("0%s0",buffer);
+                //printf("0%s0",buffer);
             }
         }
 
@@ -168,6 +300,98 @@ void hmi_task(void *pvParameters)
     }
 }
 
-
-
 /*------------------MAIN 结束------------------*/
+u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
+{
+    //u8 c[8][8],l[8];
+    u32 result;
+    u8 i,j,k,steps;
+    u8 valid,end;
+    //测试数据：
+    //1 2 3 4[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0yymmdd;N0hhmmss]
+    //1 2 3 4(P0130020;;;W0171207;;;;;;;abcde)
+    result=0;//默认为无效字符串
+    steps=0;//0查第一个起始位，1查命令和结束位
+    end=0;
+    for(i=0;i<len;i++)
+    {
+        if(steps==0)
+        {
+            //找起始位[或(
+            if(buf[i] == '[')
+            {
+                end=']';//保存结束符
+            }
+            else if(buf[i] == '(')
+            {
+                end=')';//保存结束符
+            }
+            if(end)
+            {
+                j=0;//单个命令长
+                k=0;//多少个命令
+                c[0][0]=i+1;//命令位置
+                c[0][1]=0;//命令长度
+                valid=1;//默认当前命令有效
+                steps=1;
+            }
+        }
+        else if(steps==1)
+        {
+            //找分隔符;或结束符]
+            if((buf[i] == ';') && (k < 8))
+            {//<=8个命令响应;，否则忽略;
+                if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
+                {
+                    c[k][1]=j;
+                    k++;//一共有k个命令
+                }
+                c[k][0]=i+1;
+                c[k][1]=0;
+                j=0;//单个命令长
+                valid=1;//默认当前命令有效
+            }
+            else if(buf[i]==end)
+            {
+                if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
+                {
+                    c[k][1]=j;
+                    k++;//一共有k个命令
+                }
+                if(k)
+                {//找到对应结束位并且至少有一条有效命令
+                    if(end == ']')
+                    {
+                        result=1;
+                    }
+                    else if(end == ')')
+                    {
+                        result=2;
+                    }
+                }
+                *n=k;
+                steps=2;
+            }
+            else if((buf[i] >= 'A' && buf[i] <= 'Z') || (buf[i] >= 'a' && buf[i] <= 'z') || (buf[i] >= '0' && buf[i] <= '9'))
+            {
+                j++;
+            }
+            else
+            {//出现字母和数字之外的字符都会使当前命令无效
+                valid=0;
+            }
+        }
+        else break;
+    }
+    return result;
+}
+
+u8 str_len(u8 *str)
+{//计算字符串长度
+    u8 i = 0;      
+    while ( str[i++] != '\0')
+    {
+        if (i>60) break;
+    }
+    return i;
+}

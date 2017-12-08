@@ -5,7 +5,7 @@
 #include "sys.h" 
 
 #define COM_REC_LEN             64  	//定义com通讯最大接收字节数 64
-#define HMI_REC_LEN             64  	//定义hmi通讯最大接收字节数 64
+#define HMI_REC_LEN             16  	//定义hmi通讯最大接收字节数 16
 #define EN_USART_RX 			1		//使能（1）/禁止（0）串口接收
 	  	
 extern u8  COM_RX_BUF[COM_REC_LEN]; //接收缓冲,最大COM_REC_LEN个字节.末字节为换行符 
