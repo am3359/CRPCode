@@ -121,7 +121,7 @@ void com_task(void *pvParameters)
     u8 num;//存命令个数
     u8 cmdtype;//命令类型，0无效数据，1非阻塞，2阻塞型
     
-    u8 i;
+    u8 i;//,j,valid;
 
     
     while(1)
@@ -131,7 +131,7 @@ void com_task(void *pvParameters)
             memset(buffer,0,COM_REC_LEN);    //清除缓冲区
 
             err=xQueueReceive(Com_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
-            if(err==pdTRUE)
+            if(err == pdTRUE)
             {//串口命令解析
             //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
             //(P0130020)
@@ -150,7 +150,7 @@ void com_task(void *pvParameters)
 //                printf("命令7位置,长度:%d,%d\r\n",c[6][0],c[6][1]);
 //                printf("命令8位置,长度:%d,%d\r\n",c[7][0],c[7][1]);
                 cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
-                if (cmdtype==1)
+                if (cmdtype == 1)
                 {//非阻塞命令
                     for(i=0;i<num;i++)
                     {
@@ -158,64 +158,67 @@ void com_task(void *pvParameters)
                         {
                             case 'd':
                             case 'D':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询日期
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置日期
                                 }
                                 break;
                             case 'n':
                             case 'N':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询时间
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置时间
                                 }
                                 break;
                             case 't':
                             case 'T':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询温度
                                 }
-                                else if (c[i][1]==4)
+                                else if (c[i][1] == 4)
                                 {//设置温度
                                 }
                                 break;
                             case 'v':
                             case 'V':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询阀状态
+                                    //返回当前所有阀状态
                                 }
-                                else if (c[i][1]==4)
-                                {//设置阀开关
+                                else if (c[i][1] == 4)
+                                {//设置阀开关//Vnnb
+                                    //for(j=1;j<3;i++)
+                                    //if(c[i+j][0])
                                 }
                                 break;
                             case 's':
                             case 'S':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询步进电机状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置步进电机
                                 }
                                 break;
                             case 'p':
                             case 'P':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询蠕动泵状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置蠕动泵
                                 }
                                 break;
                             case 'r':
                             case 'R':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询旋转泵状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置旋转泵
                                 }
                                 break;
@@ -224,7 +227,7 @@ void com_task(void *pvParameters)
                         }
                     }
                 }
-                else if (cmdtype==2)
+                else if (cmdtype == 2)
                 {//阻塞命令
                     for(i=0;i<num;i++)
                     {
@@ -232,37 +235,37 @@ void com_task(void *pvParameters)
                         {
                             case 's':
                             case 'S':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询步进电机状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置步进电机
                                 }
                                 break;
                             case 'p':
                             case 'P':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询蠕动泵状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置蠕动泵
                                 }
                                 break;
                             case 'r':
                             case 'R':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询旋转泵状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置旋转泵
                                 }
                                 break;
                             case 'w':
                             case 'W':
-                                if (c[i][1]==1)
+                                if (c[i][1] == 1)
                                 {//查询延时状态
                                 }
-                                else if (c[i][1]==8)
+                                else if (c[i][1] == 8)
                                 {//设置延时
                                 }
                                 break;
@@ -273,7 +276,6 @@ void com_task(void *pvParameters)
                 }
             }
         }
-        
         //vTaskDelay(10);
     }
 }
@@ -290,7 +292,7 @@ void hmi_task(void *pvParameters)
             memset(buffer,0,HMI_REC_LEN);    //清除缓冲区
             
             err=xQueueReceive(Hmi_Queue,buffer,portMAX_DELAY);
-            if(err==pdTRUE)
+            if(err == pdTRUE)
             {//HMI命令解析
                 //printf("0%s0",buffer);
             }
@@ -315,15 +317,20 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
     end=0;
     for(i=0;i<len;i++)
     {
-        if(steps==0)
+        if(steps == 0)
         {
-            //找起始位[或(
-            if(buf[i] == '[')
-            {
+            if((buf[i] == ']') || (buf[i] == ')'))
+            {//先找到了结束位直接退出
+                //result=0;//默认为无效字符串
+                //end=0;
+                steps=2;
+            }
+            else if(buf[i] == '[')
+            {//找起始位[
                 end=']';//保存结束符
             }
             else if(buf[i] == '(')
-            {
+            {//找起始位(
                 end=')';//保存结束符
             }
             if(end)
@@ -336,23 +343,26 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                 steps=1;
             }
         }
-        else if(steps==1)
+        else if(steps == 1)
         {
             //找分隔符;或结束符]
-            if((buf[i] == ';') && (k < 8))
-            {//<=8个命令响应;，否则忽略;
-                if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
-                {
-                    c[k][1]=j;
-                    k++;//一共有k个命令
-                }
-                c[k][0]=i+1;
-                c[k][1]=0;
-                j=0;//单个命令长
-                valid=1;//默认当前命令有效
-            }
-            else if(buf[i]==end)
+            if(buf[i] == ';')
             {
+                if(k < 8)
+                {//<=8个命令响应;，否则忽略;
+                    if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
+                    {
+                        c[k][1]=j;
+                        k++;//一共有k个命令
+                    }
+                    c[k][0]=i+1;
+                    c[k][1]=0;
+                    j=0;//单个命令长
+                    valid=1;//默认当前命令有效
+                }
+            }
+            else if(buf[i] == end)
+            {//??第九个命令后面有结束标志怎么处理?? [V010;V020;V030;V040;V050;V060;V070;V080;V090;]
                 if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
                 {
                     c[k][1]=j;
@@ -372,13 +382,30 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                 *n=k;
                 steps=2;
             }
-            else if((buf[i] >= 'A' && buf[i] <= 'Z') || (buf[i] >= 'a' && buf[i] <= 'z') || (buf[i] >= '0' && buf[i] <= '9'))
-            {
-                j++;
-            }
             else
-            {//出现字母和数字之外的字符都会使当前命令无效
-                valid=0;
+            {
+                if(buf[i] == 'D'|| buf[i] == 'd'|| buf[i] == 'N'|| buf[i] == 'n'|| \
+                   buf[i] == 'P'|| buf[i] == 'p'|| buf[i] == 'R'|| buf[i] == 'r'|| \
+                   buf[i] == 'S'|| buf[i] == 's'|| buf[i] == 'T'|| buf[i] == 't'|| \
+                   buf[i] == 'V'|| buf[i] == 'v'|| buf[i] == 'W'|| buf[i] == 'w')
+                {
+                    if(j)
+                    {//必须是数字，特殊字母无效
+                        valid=0;
+                    }
+                }
+                else if(buf[i] >= '0' && buf[i] <= '9')
+                {
+                    if(j==0)
+                    {//必须是特定字母，数字无效
+                        valid=0;
+                    }
+                }
+                else
+                {//出现字母和数字之外的字符都会使当前命令无效
+                    valid=0;
+                }
+                j++;
             }
         }
         else break;
