@@ -39,6 +39,24 @@ TaskHandle_t HMI_Task_Handler;
 void hmi_task(void *pvParameters);
 
 //任务优先级
+#define VALVE_TASK_PRIO      8
+//任务堆栈大小    
+#define VALVE_STK_SIZE       256  
+//任务句柄
+TaskHandle_t Valve_Task_Handler;
+//任务函数
+void valve_task(void *pvParameters);
+
+//任务优先级
+#define STEP_TASK_PRIO      7
+//任务堆栈大小    
+#define STEP_STK_SIZE       256  
+//任务句柄
+TaskHandle_t Step_Task_Handler;
+//任务函数
+void step_task(void *pvParameters);
+
+//任务优先级
 #define START_TASK_PRIO        1
 //任务堆栈大小    
 #define START_STK_SIZE         128  
@@ -47,15 +65,25 @@ TaskHandle_t Start_Task_Handler;
 //任务函数
 void start_task(void *pvParameters);
 
-#define COM_Q_NUM   4       //发送数据的消息队列的数量 
-#define HMI_Q_NUM   16      //发送数据的消息队列的数量 
-QueueHandle_t Com_Queue;    //串口信息队列句柄
-QueueHandle_t Hmi_Queue;    //HMI信息队列句柄
+#define COM_Q_NUM      4    //发送数据的消息队列的数量 
+#define HMI_Q_NUM     16    //发送数据的消息队列的数量 
 
-#define COM_WAIT   1       //等待com命令
-#define COM_INST   2       //com命令(instruct)解析
+#define CMD_LEN       12    //阀控制命令长度  //命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
 
-#define HMI_WAIT   1       //等待hmi命令
+#define VALVE_Q_NUM    8    //发送阀控制命令的消息队列的数量 
+#define STEP_Q_NUM     8    //发送步进电机控制命令的消息队列的数量 
+#define PUMP_Q_NUM     8    //发送泵控制命令的消息队列的数量 
+
+QueueHandle_t Com_Queue;    //串口消息队列句柄
+QueueHandle_t Hmi_Queue;    //HMI消息队列句柄
+QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
+QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
+QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
+
+//#define COM_WAIT   1       //等待com命令
+//#define COM_INST   2       //com命令(instruct)解析
+
+//#define HMI_WAIT   1       //等待hmi命令
 
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
@@ -86,9 +114,20 @@ void start_task(void *pvParameters)
     taskENTER_CRITICAL();           //进入临界区
     
     //创建消息队列
-    Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue,队列项长度是串口接收缓冲区长度
-    Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue,队列项长度是串口接收缓冲区长度
+    Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue
+    Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue
     
+    Valve_Queue=xQueueCreate(VALVE_Q_NUM,CMD_LEN); //创建消息Valve_Queue
+    Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
+    //Pump_Queue=xQueueCreate(PUMP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
+
+    //创建com_task任务
+    xTaskCreate((TaskFunction_t )com_task,
+                (const char*    )"com_task",
+                (uint16_t       )COM_STK_SIZE,
+                (void*          )NULL,
+                (UBaseType_t    )COM_TASK_PRIO,
+                (TaskHandle_t*  )&Com_Task_Handler);
     //创建hmi_task任务
     xTaskCreate((TaskFunction_t )hmi_task,
                 (const char*    )"hmi_task",
@@ -96,17 +135,25 @@ void start_task(void *pvParameters)
                 (void*          )NULL,
                 (UBaseType_t    )HMI_TASK_PRIO,
                 (TaskHandle_t*  )&HMI_Task_Handler);
-    //创建LED1任务
-    xTaskCreate((TaskFunction_t )com_task,
-                (const char*    )"com_task",
-                (uint16_t       )COM_STK_SIZE,
+    //创建valve_task任务
+    xTaskCreate((TaskFunction_t )valve_task,
+                (const char*    )"valve_task",
+                (uint16_t       )VALVE_STK_SIZE,
                 (void*          )NULL,
-                (UBaseType_t    )COM_TASK_PRIO,
-                (TaskHandle_t*  )&Com_Task_Handler);
+                (UBaseType_t    )VALVE_TASK_PRIO,
+                (TaskHandle_t*  )&Valve_Task_Handler);
+    //创建step_task任务
+    xTaskCreate((TaskFunction_t )step_task,
+                (const char*    )"step_task",
+                (uint16_t       )STEP_STK_SIZE,
+                (void*          )NULL,
+                (UBaseType_t    )STEP_TASK_PRIO,
+                (TaskHandle_t*  )&Step_Task_Handler);
+               
     vTaskDelete(Start_Task_Handler); //删除开始任务
     taskEXIT_CRITICAL();            //退出临界区
 }
-
+//u8 x;
 //com_task任务函数
 void com_task(void *pvParameters)
 {//uart1通讯
@@ -116,6 +163,7 @@ void com_task(void *pvParameters)
     
     u8 buffer[COM_REC_LEN];
     BaseType_t err;
+    u8 command[12];//命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
     
     u8 c[8][2];//存位置和长度
     u8 num;//存命令个数
@@ -135,28 +183,31 @@ void com_task(void *pvParameters)
             {//串口命令解析
             //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
             //(P0130020)
-//                printf("%s\r\n",buffer);
+
 //                printf("字符长度:%d\r\n",str_len(buffer));
 //                memset(c,0,8*2);
 //                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
+//                printf("%s\r\n",buffer);
 //                printf("命令数:%d\r\n",num);
 //                printf("命令类型:%d\r\n",cmdtype);
-//                printf("命令1位置,长度:%d,%d\r\n",c[0][0],c[0][1]);
-//                printf("命令2位置,长度:%d,%d\r\n",c[1][0],c[1][1]);
-//                printf("命令3位置,长度:%d,%d\r\n",c[2][0],c[2][1]);
-//                printf("命令4位置,长度:%d,%d\r\n",c[3][0],c[3][1]);
-//                printf("命令5位置,长度:%d,%d\r\n",c[4][0],c[4][1]);
-//                printf("命令6位置,长度:%d,%d\r\n",c[5][0],c[5][1]);
-//                printf("命令7位置,长度:%d,%d\r\n",c[6][0],c[6][1]);
-//                printf("命令8位置,长度:%d,%d\r\n",c[7][0],c[7][1]);
-                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
+//                if(cmdtype)
+//                {
+//                    for(i=0;i<num;i++)
+//                    {
+//                        printf("命令%d: ",i+1);
+//                        Uart1_PutString(buffer+c[i][0],c[i][1]);
+//                        printf("\r\n");
+//                    }
+//                }
+//                printf("\r\n");
+
+                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);//输入字符串，判断出有效命令位置长度和个数，返回类型cmdtype：0无效数据，1非阻塞，2阻塞型
                 if (cmdtype == 1)
                 {//非阻塞命令
                     for(i=0;i<num;i++)
                     {
                         switch(buffer[c[i][0]])
                         {
-                            case 'd':
                             case 'D':
                                 if (c[i][1] == 1)
                                 {//查询日期
@@ -165,7 +216,6 @@ void com_task(void *pvParameters)
                                 {//设置日期
                                 }
                                 break;
-                            case 'n':
                             case 'N':
                                 if (c[i][1] == 1)
                                 {//查询时间
@@ -174,7 +224,6 @@ void com_task(void *pvParameters)
                                 {//设置时间
                                 }
                                 break;
-                            case 't':
                             case 'T':
                                 if (c[i][1] == 1)
                                 {//查询温度
@@ -183,43 +232,34 @@ void com_task(void *pvParameters)
                                 {//设置温度
                                 }
                                 break;
-                            case 'v':
                             case 'V':
-                                if (c[i][1] == 1)
-                                {//查询阀状态
-                                    //返回当前所有阀状态
-                                }
-                                else if (c[i][1] == 4)
-                                {//设置阀开关//Vnnb
-                                    //for(j=1;j<3;i++)
-                                    //if(c[i+j][0])
+                                if ((c[i][1] == 1) || (c[i][1] == 4))
+                                {//查询阀状态  //设置阀开关//Vnnb
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    command[0]='1';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Valve_Queue,command,10);//向Valve_Queue队列中发送数据
                                 }
                                 break;
-                            case 's':
                             case 'S':
-                                if (c[i][1] == 1)
-                                {//查询步进电机状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置步进电机
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询步进电机状态  //设置步进电机
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    command[0]='1';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Step_Queue,command,10);//向Step_Queue队列中发送数据
                                 }
                                 break;
-                            case 'p':
                             case 'P':
-                                if (c[i][1] == 1)
-                                {//查询蠕动泵状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置蠕动泵
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询蠕动泵状态  //设置蠕动泵
+
                                 }
                                 break;
-                            case 'r':
                             case 'R':
-                                if (c[i][1] == 1)
-                                {//查询旋转泵状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置旋转泵
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询旋转泵状态  //设置旋转泵
+                                    
                                 }
                                 break;
                             default:
@@ -233,34 +273,27 @@ void com_task(void *pvParameters)
                     {
                         switch(buffer[c[i][0]])
                         {
-                            case 's':
                             case 'S':
-                                if (c[i][1] == 1)
-                                {//查询步进电机状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置步进电机
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询步进电机状态  //设置步进电机
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    command[0]='2';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Step_Queue,command,10);//向Step_Queue队列中发送数据
                                 }
                                 break;
-                            case 'p':
                             case 'P':
-                                if (c[i][1] == 1)
-                                {//查询蠕动泵状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置蠕动泵
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询蠕动泵状态  //设置蠕动泵
+
                                 }
                                 break;
-                            case 'r':
                             case 'R':
-                                if (c[i][1] == 1)
-                                {//查询旋转泵状态
-                                }
-                                else if (c[i][1] == 8)
-                                {//设置旋转泵
+                                if ((c[i][1] == 1) || (c[i][1] == 8))
+                                {//查询旋转泵状态  //设置旋转泵
+                                    
                                 }
                                 break;
-                            case 'w':
                             case 'W':
                                 if (c[i][1] == 1)
                                 {//查询延时状态
@@ -302,19 +335,65 @@ void hmi_task(void *pvParameters)
     }
 }
 
+//valve_task任务函数 
+void valve_task(void *pvParameters)
+{
+    u8 buffer[CMD_LEN];
+    BaseType_t err;
+    //u32 valve_state;
+    while(1)
+    {
+        if(Valve_Queue!=NULL)
+        {
+            memset(buffer,0,CMD_LEN);    //清除缓冲区
+
+            err=xQueueReceive(Valve_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+            if(err == pdTRUE)
+            {//执行阀控制命令
+                printf("阀控制命令:%s\r\n",buffer);
+            }
+        }
+    }
+}
+
+//step_task任务函数 
+void step_task(void *pvParameters)
+{
+    u8 buffer[CMD_LEN];
+    BaseType_t err;
+
+    while(1)
+    {
+        if(Step_Queue!=NULL)
+        {
+            memset(buffer,0,CMD_LEN);    //清除缓冲区
+
+            err=xQueueReceive(Step_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+            if(err == pdTRUE)
+            {//执行步进电机控制命令
+                printf("步进电机控制命令:%s\r\n",buffer);
+            }
+        }
+    }
+}
+
+
+
 /*------------------MAIN 结束------------------*/
+//查找字符串中的有效命令，并把字母变成大写
+//buf[]：命令字符串，len：字符串长度
+//c[8][2]：存放有效命令起始位置和长度，n：存放有效命令数
+//c[8][2]一维数组长度>=8否则会出错
+//返回值：0无效数据，1非阻塞，2阻塞型
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
 {
-    //u8 c[8][8],l[8];
     u32 result;
     u8 i,j,k,steps;
     u8 valid,end;
-    //测试数据：
-    //1 2 3 4[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0yymmdd;N0hhmmss]
-    //1 2 3 4(P0130020;;;W0171207;;;;;;;abcde)
     result=0;//默认为无效字符串
     steps=0;//0查第一个起始位，1查命令和结束位
     end=0;
+    k=0;//多少个命令
     for(i=0;i<len;i++)
     {
         if(steps == 0)
@@ -336,7 +415,6 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
             if(end)
             {
                 j=0;//单个命令长
-                k=0;//多少个命令
                 c[0][0]=i+1;//命令位置
                 c[0][1]=0;//命令长度
                 valid=1;//默认当前命令有效
@@ -347,9 +425,9 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
         {
             //找分隔符;或结束符]
             if(buf[i] == ';')
-            {
-                if(k < 8)
-                {//<=8个命令响应;，否则忽略;
+            {//<=8个命令响应;否则忽略;
+                if(k < 7)
+                {//后面还可以有命令
                     if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
                     {
                         c[k][1]=j;
@@ -360,13 +438,24 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                     j=0;//单个命令长
                     valid=1;//默认当前命令有效
                 }
+                else if(k == 7)
+                {//后面命令忽略
+                    if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
+                    {
+                        c[k][1]=j;
+                        k++;//一共有k个命令
+                    }
+                }
             }
             else if(buf[i] == end)
-            {//??第九个命令后面有结束标志怎么处理?? [V010;V020;V030;V040;V050;V060;V070;V080;V090;]
-                if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
-                {
-                    c[k][1]=j;
-                    k++;//一共有k个命令
+            {
+                if(k <= 7)
+                {//<=8个命令响应;否则忽略;
+                    if((j)&&(valid))//两个;间隔小于最小指令长度1就丢弃,无效指令丢弃
+                    {
+                        c[k][1]=j;
+                        k++;//一共有k个命令
+                    }
                 }
                 if(k)
                 {//找到对应结束位并且至少有一条有效命令
@@ -379,25 +468,27 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                         result=2;
                     }
                 }
-                *n=k;
+                //*n=k;
                 steps=2;
             }
             else
             {
-                if(buf[i] == 'D'|| buf[i] == 'd'|| buf[i] == 'N'|| buf[i] == 'n'|| \
-                   buf[i] == 'P'|| buf[i] == 'p'|| buf[i] == 'R'|| buf[i] == 'r'|| \
-                   buf[i] == 'S'|| buf[i] == 's'|| buf[i] == 'T'|| buf[i] == 't'|| \
-                   buf[i] == 'V'|| buf[i] == 'v'|| buf[i] == 'W'|| buf[i] == 'w')
+                if(buf[i] >= 'a' && buf[i] <= 'z')
+                {//转成大写
+                    buf[i]+='A'-'a';
+                }
+                if(buf[i] == 'D'|| buf[i] == 'N'|| buf[i] == 'P'|| buf[i] == 'R'||
+                   buf[i] == 'S'|| buf[i] == 'T'|| buf[i] == 'V'|| buf[i] == 'W')
                 {
                     if(j)
-                    {//必须是数字，特殊字母无效
+                    {//后面必须是数字，特殊字母无效
                         valid=0;
                     }
                 }
                 else if(buf[i] >= '0' && buf[i] <= '9')
                 {
                     if(j==0)
-                    {//必须是特定字母，数字无效
+                    {//开头必须是特定字母，数字无效
                         valid=0;
                     }
                 }
@@ -408,8 +499,12 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                 j++;
             }
         }
-        else break;
+        else
+        {
+            break;
+        }
     }
+    *n=k;
     return result;
 }
 
@@ -421,4 +516,11 @@ u8 str_len(u8 *str)
         if (i>60) break;
     }
     return i;
+//    while(str[i])
+//    {
+//        ++i;
+//        if (i>60) break;
+//    }
+
+//    return i;
 }

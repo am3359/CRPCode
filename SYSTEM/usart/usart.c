@@ -92,6 +92,25 @@ void UART1_Init(u32 bound){
 	
 }
 
+u8 Uart1_PutChar(u8 ch)
+{
+  /* Write a character to the USART */
+  USART_SendData(USART1, (u8) ch);
+  while(USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET)
+  {
+  }
+  return ch;
+}
+
+void Uart1_PutString(u8 * buf , u8 len)
+{
+    u32 i;
+    for(i=0;i<len;i++)
+    {
+        Uart1_PutChar(*buf++);
+    }
+}
+
 extern QueueHandle_t Com_Queue;	//信息队列句柄
 
 void USART1_IRQHandler(void)                	//串口1中断服务程序
