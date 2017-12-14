@@ -365,7 +365,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\AD7799;.\HARDWARE\DRV8825;.\HARDWARE\MOTO;.\HARDWARE\PWM;.\HARDWARE\SPI;.\HARDWARE\TIMER</IncludePath>
+              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\HC595;.\HARDWARE\AD7799;.\HARDWARE\DRV8825;.\HARDWARE\MOTO;.\HARDWARE\PWM;.\HARDWARE\SPI;.\HARDWARE\TIMER</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -503,6 +503,11 @@
         <Group>
           <GroupName>HARDWARE</GroupName>
           <Files>
+            <File>
+              <FileName>HC595.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\HC595\HC595.c</FilePath>
+            </File>
             <File>
               <FileName>AD7799.c</FileName>
               <FileType>1</FileType>

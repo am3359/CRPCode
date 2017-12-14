@@ -7,6 +7,8 @@
 //#include "pwm.h"
 //#include "ad7799.h"
 //#include "DRV8825.h"
+#include "HC595.h"
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -97,6 +99,8 @@ int main(void)
     delay_init(168);  //初始化延时函数
     UART1_Init(115200);    //串口初始化波特率为115200
     USART3_Init(115200);//9600
+    
+    HC595Init();
     
     //创建开始任务
     xTaskCreate((TaskFunction_t )start_task,            //任务函数
@@ -340,19 +344,67 @@ void valve_task(void *pvParameters)
 {
     u8 buffer[CMD_LEN];
     BaseType_t err;
-    //u32 valve_state;
+    static u32 valve_state;
+    u8 bits;
+    
+    u32 PreviousState = 0;
+    u32 CurrentState  = 0;
+    u32 NextState     = 0;
+    
     while(1)
     {
-        if(Valve_Queue!=NULL)
+        switch(CurrentState)
         {
-            memset(buffer,0,CMD_LEN);    //清除缓冲区
+//            case 0:
+//                CurrentState = COM_WAIT;
+//                NextState    = COM_WAIT;
+//                break;
+            case 1:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
 
-            err=xQueueReceive(Valve_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
-            if(err == pdTRUE)
-            {//执行阀控制命令
-                printf("阀控制命令:%s\r\n",buffer);
-            }
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+                    if(Valve_Queue!=NULL)
+                    {
+                        memset(buffer,0,CMD_LEN);    //清除缓冲区
+
+                        err=xQueueReceive(Valve_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+                        if(err == pdTRUE)
+                        {//执行阀控制命令
+                            printf("阀控制命令:%s\r\n",buffer);
+                            //V090
+                            bits=(buffer[1]-'0')*10+buffer[2]-'0';
+                            if (bits)//bits>0相应的阀动作
+                            {
+                                if(buffer[3]=='0')
+                                    valve_state &= ~(1<<(bits-1));
+                                else
+                                    valve_state |= 1<<(bits-1);
+                            }
+                            printf("阀状态:%#x\r\n",valve_state);
+                            SwitchOut(valve_state);
+                        }
+                    }
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+//            case 2:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
+            default:
+                CurrentState = 1;
+                NextState    = 1;
+                valve_state = 0;
+                printf("阀状态:%#x\r\n",valve_state);
+                SwitchOut(valve_state);
+                break;
+
         }
+        
     }
 }
 
