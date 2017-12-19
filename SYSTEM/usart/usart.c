@@ -111,7 +111,7 @@ void Uart1_PutString(u8 * buf , u8 len)
     }
 }
 
-extern QueueHandle_t Com_Queue;	//信息队列句柄
+extern QueueHandle_t Com_Queue;	//信息队列句柄，消息队列长度为COM_Q_NUM = 4
 
 void USART1_IRQHandler(void)                	//串口1中断服务程序
 {//以0x0D 0x0A 结尾
@@ -220,7 +220,7 @@ void USART3_Init(u32 bound){
 	NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器、
 }
 
-extern QueueHandle_t Hmi_Queue;	//信息队列句柄
+extern QueueHandle_t Hmi_Queue;	//信息队列句柄，消息队列长度为HMI_Q_NUM = 16
 
 void USART3_IRQHandler(void)                	//串口3中断服务程序
 {//以0xff 0xff 0xff结尾

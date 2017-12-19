@@ -161,10 +161,7 @@ void start_task(void *pvParameters)
 //com_task任务函数
 void com_task(void *pvParameters)
 {//uart1通讯
-    //u32 PreviousState = 0;
-    //u32 CurrentState  = 0;
-    //u32 NextState     = 0;
-    
+
     u8 buffer[COM_REC_LEN];
     BaseType_t err;
     u8 command[12];//命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
@@ -175,7 +172,6 @@ void com_task(void *pvParameters)
     
     u8 i;//,j,valid;
 
-    
     while(1)
     {
         if(Com_Queue!=NULL)
@@ -187,24 +183,6 @@ void com_task(void *pvParameters)
             {//串口命令解析
             //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
             //(P0130020)
-
-//                printf("字符长度:%d\r\n",str_len(buffer));
-//                memset(c,0,8*2);
-//                cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);
-//                printf("%s\r\n",buffer);
-//                printf("命令数:%d\r\n",num);
-//                printf("命令类型:%d\r\n",cmdtype);
-//                if(cmdtype)
-//                {
-//                    for(i=0;i<num;i++)
-//                    {
-//                        printf("命令%d: ",i+1);
-//                        Uart1_PutString(buffer+c[i][0],c[i][1]);
-//                        printf("\r\n");
-//                    }
-//                }
-//                printf("\r\n");
-
                 cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);//输入字符串，判断出有效命令位置长度和个数，返回类型cmdtype：0无效数据，1非阻塞，2阻塞型
                 if (cmdtype == 1)
                 {//非阻塞命令
