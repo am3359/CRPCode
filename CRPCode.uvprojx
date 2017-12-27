@@ -365,7 +365,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\HC595;.\HARDWARE\AD7799;.\HARDWARE\DRV8825;.\HARDWARE\MOTO;.\HARDWARE\PWM;.\HARDWARE\SPI;.\HARDWARE\TIMER</IncludePath>
+              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\AD7799;.\HARDWARE\DMA;.\HARDWARE\HC595;.\HARDWARE\SPI;.\HARDWARE\STEPMOTO;.\HARDWARE\TIMER</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -504,34 +504,29 @@
           <GroupName>HARDWARE</GroupName>
           <Files>
             <File>
-              <FileName>HC595.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\HARDWARE\HC595\HC595.c</FilePath>
-            </File>
-            <File>
               <FileName>AD7799.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\AD7799\AD7799.c</FilePath>
             </File>
             <File>
-              <FileName>DRV8825.c</FileName>
+              <FileName>dma.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\HARDWARE\DRV8825\DRV8825.c</FilePath>
+              <FilePath>.\HARDWARE\DMA\dma.c</FilePath>
             </File>
             <File>
-              <FileName>moto.c</FileName>
+              <FileName>HC595.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\HARDWARE\MOTO\moto.c</FilePath>
-            </File>
-            <File>
-              <FileName>PWM.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\HARDWARE\PWM\PWM.c</FilePath>
+              <FilePath>.\HARDWARE\HC595\HC595.c</FilePath>
             </File>
             <File>
               <FileName>spi.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\SPI\spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>stepmoto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\STEPMOTO\stepmoto.c</FilePath>
             </File>
             <File>
               <FileName>timer.c</FileName>

@@ -3,11 +3,9 @@
 #include "usart.h"
 //#include "spi.h"
 //#include "timer.h"
-//#include "moto.h"
-//#include "pwm.h"
 //#include "ad7799.h"
-//#include "DRV8825.h"
 #include "HC595.h"
+#include "stepmoto.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -89,6 +87,7 @@ QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
 
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
+u32 GetPWMCnt;
 
 //------------------MAIN 开始------------------
 int main(void)
@@ -100,7 +99,17 @@ int main(void)
     UART1_Init(115200);    //串口初始化波特率为115200
     USART3_Init(115200);//9600
     
+//  TIM3_Init();
+    
     HC595Init();
+    StepMotoInit();
+
+
+    
+//  TIM_Cmd(TIM3, DISABLE);
+//  GetPWMCnt  = TIM_GetCounter(TIM3);
+//  TIM_SetCounter(TIM3, 0); 
+//  TIM_Cmd(TIM3, ENABLE);
     
     //创建开始任务
     xTaskCreate((TaskFunction_t )start_task,            //任务函数
@@ -391,6 +400,8 @@ void step_task(void *pvParameters)
 {
     u8 buffer[CMD_LEN];
     BaseType_t err;
+    s32 steps;
+    u8 num;
 
     while(1)
     {
@@ -402,12 +413,28 @@ void step_task(void *pvParameters)
             if(err == pdTRUE)
             {//执行步进电机控制命令
                 printf("步进电机控制命令:%s\r\n",buffer);
+                num=(buffer[1]-'0')*10+buffer[2]-'0';
+                switch(num)
+                {
+                    case 1:
+                        steps = (buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
+                        if((buffer[3]-'0') >= 4) steps=-steps;
+                        StepMoto1Move(steps);
+//  vTaskDelay(2000);
+//  TIM_Cmd(TIM3, DISABLE);
+//  GetPWMCnt  = TIM_GetCounter(TIM3);
+//  TIM_SetCounter(TIM3, 0); 
+//  TIM_Cmd(TIM3, ENABLE);
+//  printf("实际步数:%d\r\n",GetPWMCnt);
+                        break;
+                    default:
+                        break;
+                }
+                
             }
         }
     }
 }
-
-
 
 /*------------------MAIN 结束------------------*/
 //查找字符串中的有效命令，并把字母变成大写
