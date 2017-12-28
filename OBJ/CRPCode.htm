@@ -3,7 +3,7 @@
 <title>Static Call Graph - [.\OBJ\CRPCode.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image .\OBJ\CRPCode.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5050106: Last Updated: Wed Dec 27 17:07:41 2017
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5050106: Last Updated: Thu Dec 28 14:18:48 2017
 <BR><P>
 <H3>Maximum Stack Usage =        424 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -1281,8 +1281,11 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[77]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[b8]"></a>delay_us</STRONG> (Thumb, 68 bytes, Stack size 16 bytes, delay.o(.text), UNUSED)
-<BR><BR>[Called By]<UL><LI><a href="#[b9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;delay_xms
+<P><STRONG><a name="[b8]"></a>delay_us</STRONG> (Thumb, 68 bytes, Stack size 16 bytes, delay.o(.text))
+<BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = delay_us
+</UL>
+<BR>[Called By]<UL><LI><a href="#[96]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StepMotoInit
+<LI><a href="#[b9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;delay_xms
 <LI><a href="#[b6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;delay_ms
 </UL>
 
@@ -1435,17 +1438,18 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[96]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StepMotoInit
 </UL>
 
-<P><STRONG><a name="[96]"></a>StepMotoInit</STRONG> (Thumb, 16 bytes, Stack size 8 bytes, stepmoto.o(.text))
+<P><STRONG><a name="[96]"></a>StepMotoInit</STRONG> (Thumb, 88 bytes, Stack size 8 bytes, stepmoto.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 64<LI>Call Chain = StepMotoInit &rArr; TIM4_PWM_Config &rArr; TIM_OC1Init
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM4_PWM_Config
 <LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StepGPIO_Init
 <LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DMA1_Init
+<LI><a href="#[b8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;delay_us
 </UL>
 <BR>[Called By]<UL><LI><a href="#[77]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[81]"></a>StepMoto1Move</STRONG> (Thumb, 156 bytes, Stack size 16 bytes, stepmoto.o(.text))
+<P><STRONG><a name="[81]"></a>StepMoto1Move</STRONG> (Thumb, 166 bytes, Stack size 16 bytes, stepmoto.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 104<LI>Call Chain = StepMoto1Move &rArr; TIM4_PWMDMA_Config &rArr; DMA_ITConfig
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM_DMACmd
@@ -1456,7 +1460,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[7e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;step_task
 </UL>
 
-<P><STRONG><a name="[17]"></a>DMA1_Stream0_IRQHandler</STRONG> (Thumb, 190 bytes, Stack size 8 bytes, stepmoto.o(.text))
+<P><STRONG><a name="[17]"></a>DMA1_Stream0_IRQHandler</STRONG> (Thumb, 196 bytes, Stack size 8 bytes, stepmoto.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 96<LI>Call Chain = DMA1_Stream0_IRQHandler &rArr; TIM4_PWMDMA_Config &rArr; DMA_ITConfig
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM_DMACmd
@@ -1478,7 +1482,7 @@ Global Symbols
 <LI><a href="#[bd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;GPIO_Init
 </UL>
 
-<P><STRONG><a name="[d5]"></a>TIM4_PWM_Config</STRONG> (Thumb, 124 bytes, Stack size 40 bytes, timer.o(.text))
+<P><STRONG><a name="[d5]"></a>TIM4_PWM_Config</STRONG> (Thumb, 130 bytes, Stack size 40 bytes, timer.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 56<LI>Call Chain = TIM4_PWM_Config &rArr; TIM_OC1Init
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM_DMACmd

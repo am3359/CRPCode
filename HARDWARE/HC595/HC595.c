@@ -53,7 +53,7 @@ void HC595Load(void)
     HC595_CS = 1;
 }
 
-void SwitchOut(u16 data)
+void SwitchOut(u16 data)//???是否设置临界段
 {
     HC595Send(data >> 8);
     HC595Send(data >> 0);

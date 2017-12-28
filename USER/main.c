@@ -101,7 +101,7 @@ int main(void)
     
 //  TIM3_Init();
     
-    HC595Init();
+    HC595Init();//??
     StepMotoInit();
 
 

@@ -7,7 +7,7 @@
 #define SLP1  PDout(0)
 #define EN1   PDout(1)
 
-#define StepBufLen1     48
+#define StepBufLen1     80
 
 void StepMotoInit(void);
 void StepMoto1Move(s32 step);
