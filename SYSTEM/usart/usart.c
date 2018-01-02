@@ -186,8 +186,8 @@ void USART3_Init(u32 bound){
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3,ENABLE);//使能USART3时钟
  
 	//串口3对应引脚复用映射
-	GPIO_PinAFConfig(GPIOC,GPIO_PinSource10,GPIO_AF_USART3); //GPIOA10复用为USART3
-	GPIO_PinAFConfig(GPIOC,GPIO_PinSource11,GPIO_AF_USART3); //GPIOA11复用为USART3
+	GPIO_PinAFConfig(GPIOC,GPIO_PinSource10,GPIO_AF_USART3); //GPIOC10复用为USART3
+	GPIO_PinAFConfig(GPIOC,GPIO_PinSource11,GPIO_AF_USART3); //GPIOC11复用为USART3
 
 	//USART3端口配置
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11; //GPIOC10与GPIOC11
@@ -209,6 +209,7 @@ void USART3_Init(u32 bound){
 	USART_Cmd(USART3, ENABLE);  //使能串口1 
 	
 	//USART_ClearFlag(USART3, USART_FLAG_TC);
+    USART_GetFlagStatus(USART3, USART_FLAG_TC);//首字节丢失问题
 		
 	USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);//开启相关中断
 

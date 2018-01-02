@@ -57,7 +57,7 @@ void DMA1_Init(void)
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE);
     
     NVIC_InitStructure.NVIC_IRQChannel = DMA1_Stream0_IRQn;  //DMA1中断通道
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 9;//抢占优先级9  或者6？？
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 9;//抢占优先级9  或者6??优先级高低怎么选择
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;       //子优先级0
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;          //IRQ通道使能
     NVIC_Init(&NVIC_InitStructure);

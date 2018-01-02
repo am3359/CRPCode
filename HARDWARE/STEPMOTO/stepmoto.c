@@ -126,7 +126,7 @@ void StepMotoInit(void)
 输出参数：
 功能描述：S曲线计算，根据输入参数更新加速度缓冲区，加速度和减速度相同，启动DMA PWM
 ************************************************************************************/
-void StepMoto1Move(s32 steps)
+void StepMoto1Move(s32 steps)//??载入S曲线时可以修改占空比，使高脉冲是最快速度时周期的一半
 {
     //s32 Start_Steps = 0;
     //u32 steps;
@@ -150,7 +150,7 @@ void StepMoto1Move(s32 steps)
     }
     
     Stepper_Run = SteppAccelBuf[StepBufLen1-1];         //匀速时的运行频率
-    Stepper_Mid_Steps = steps - StepBufLen1*2; //匀速阶段步数
+    Stepper_Mid_Steps = steps - StepBufLen1*2; //匀速阶段步数            ??还需要考虑短行程，速度模式等情况??
     
     Stepper_Period=3;
   SLP1=0;//SLP1=1;

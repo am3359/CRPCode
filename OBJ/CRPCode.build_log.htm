@@ -26,11 +26,16 @@ Project File Date:  12/27/2017
 
 <h2>Output:</h2>
 Build target 'CRPCode'
-compiling stepmoto.c...
+compiling main.c...
+USER\main.c(435): warning:  #128-D: loop is not reachable
+      while(1)
+USER\main.c(347): warning:  #177-D: variable "command" was declared but never referenced
+      u8 command[12];
+USER\main.c: 2 warnings, 0 errors
 linking...
-Program Size: Code=26690 RO-data=642 RW-data=220 ZI-data=23356  
+Program Size: Code=27090 RO-data=642 RW-data=224 ZI-data=23360  
 FromELF: creating hex file...
-".\OBJ\CRPCode.axf" - 0 Error(s), 0 Warning(s).
+".\OBJ\CRPCode.axf" - 0 Error(s), 2 Warning(s).
 
 <h2>Collection of Component include folders:</h2>
   F:\CRP\CRPCode\RTE

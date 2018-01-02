@@ -1,29 +1,29 @@
-Èí¼þÉè¼ÆËµÃ÷
+Èí¼þÉè¼ÆËµÃ÷V1
 2017Äê12ÔÂ1ÈÕ
 Ò»¡¢ÃüÁî×Ö·û´®£º 
-¿ØÖÆÃüÁîÊÇÒ»¸ö×Ö·û´®ÁÐ±í£¬·ÖÎª×èÈûÊ½ºÍ·Ç×èÈûÊ½¡£×èÈûÊ½ÃüÁîÓÃ¡°(¡±¿ªÍ·£¬¡°)¡±½áÊø£¬ÖÐ¼ä¶à¸öÃüÁîÓÃ¡°;¡±·Ö¸ô£¬Ò»´ÎÖ»ÄÜ¿ØÖÆÒ»¸ö¶ÔÏó£¬Ö´ÐÐÊ±µ±Ç°´¦ÓÚ¿ÕÏÐ×´Ì¬£¬ÐèÒªµÈµ½¸ÃÃüÁîÍê³ÉÔÙ°´Ë³ÐòÖ´ÐÐÏÂÒ»¸öÃüÁî¡£·Ç×èÈûÊ½ÓÃ¡°[¡±¿ªÍ·£¬¡°]¡±½áÊø£¬¿ÉÒÔ¿ØÖÆ¶à¸ö¶ÔÏó£¬ÖÐ¼ä¶à¸öÃüÁîÓÃ¡°;¡±·Ö¸ô£¬Îª·Ç×èÈûÖ´ÐÐ£¬ËùÓÐÃüÁîÍ¬Ê±·¢³ö£¬²»µÈ´ýÖ´ÐÐ½áÊøÁ¢¼´·µ»Ø¡£
-Ò»ÌõÃüÁî×Ö·û´®³¤¶ÈÐ¡ÓÚµÈÓÚ60¸ö×Ö½ÚÒÔ»Ø³µ»»ÐÐ½áÎ²£¬Ò»ÌõÃüÁî×Ö·û´®°üº¬ÖÁÉÙÒ»Ìõ×î¶à8ÌõÃüÁî£¬·ñÔòÎÞÐ§¡£
-ÃüÁî×Ö·û´®¿ÉÒÔÓÉHMIÈÎÎñ»ò´®¿ÚÍ¨Ñ¶ÈÎÎñ·¢ËÍ£¬´®¿Ú·¢²âÊÔÃüÁî¿ÉÒÔÑéÖ¤¸÷¸öÄ£¿é
-¹¦ÄÜ¿é	Ö´ÐÐÃüÁî	²éÑ¯×´Ì¬
-·§	Vnnb£¨4×Ö½Ú£©·Ç×èÈûÊ½ÃüÁî	V£¨1×Ö½Ú£©
-²½½øµç»ú	Snncpppp£¨8×Ö½Ú£©·Ç×èÈûÊ½»ò×èÈûÃüÁî	S£¨1×Ö½Ú£©
-Èä¶¯±Ã	Pnnktttt£¨8×Ö½Ú£©·Ç×èÈûÊ½»ò×èÈûÃüÁî	P£¨1×Ö½Ú£©
-Ðý×ª±Ã	Rnnctttt£¨8×Ö½Ú£©·Ç×èÈûÊ½»ò×èÈûÃüÁî	R£¨1×Ö½Ú£©
-ÎÂ¶È	Tnnb£¨4×Ö½Ú£©·Ç×èÈûÊ½ÃüÁî	T£¨1×Ö½Ú£©
-ÑÓÊ±	Wxxxxxxx£¨8×Ö½Ú£©×èÈûÊ½ÃüÁî	W£¨1×Ö½Ú£©
-ÈÕÆÚ	D0yymmdd£¨8×Ö½Ú£©·Ç×èÈûÊ½ÃüÁî	D£¨1×Ö½Ú£©
-Ê±¼ä	N0hhmmss£¨8×Ö½Ú£©·Ç×èÈûÊ½ÃüÁî	N£¨1×Ö½Ú£©
+¿ØÖÆÃüÁîÊÇÒ»¸ö×Ö·û´®£¬·ÖÎª×èÈûÊ½ºÍ·Ç×èÈûÊ½¡£×èÈûÊ½ÃüÁîÓÃ¡°(¡±¿ªÍ·£¬¡°)¡±½áÊø£¬¶à¸öÃüÁîÓÃ¡°;¡±·Ö¸ô£¬Ò»´ÎÖ»ÄÜ¿ØÖÆÒ»¸ö¶ÔÏó£¬Ö´ÐÐÊ±±ØÐë±£Ö¤ÆäËü×èÈûÃüÁîÒÑ¾­Ö´ÐÐÍê£¬ÃüÁîÍê³ÉºóÔÙ°´Ë³ÐòÖ´ÐÐÏÂÒ»¸ö×èÈûÃüÁî¡£·Ç×èÈûÊ½ÓÃ¡°[¡±¿ªÍ·£¬¡°]¡±½áÊø£¬¶à¸öÃüÁîÓÃ¡°;¡±·Ö¸ô£¬·Ç×èÈûÖ´ÐÐ£¬¿ÉÒÔÍ¬Ê±¿ØÖÆ¶à¸ö¶ÔÏó£¬ËùÓÐÃüÁîÍ¬Ê±·¢³ö£¬²»µÈ´ýÖ´ÐÐ½áÊøÁ¢¼´·µ»Ø¡£
+Ò»ÌõÃüÁî×Ö·û´®³¤¶ÈÐ¡ÓÚµÈÓÚ60¸ö×Ö½ÚÒÔ»Ø³µ»»ÐÐ½áÎ²£¬Ò»ÌõÃüÁî×Ö·û´®°üº¬ÖÁÉÙ1Ìõ£¬×î¶à8ÌõÃüÁî¡£×Ö·û´®ÖÐ×ÖÄ¸´óÐ¡Ð´¾ù¿É¡£
+ÃüÁî×Ö·û´®Í¨¹ý´®¿ÚÍ¨Ñ¶ÈÎÎñ½ÓÊÕ£¬¿ÉÒÔÍ¨¹ýÏò´®¿Ú·¢ËÍ²âÊÔÃüÁîÑéÖ¤¸÷¸öÄ£¿é
+¹¦ÄÜ¿é	Ö´ÐÐÃüÁî	²éÑ¯×´Ì¬	ÃüÁîÀàÐÍ
+ÈÕÆÚ	D0yymmdd£¨8×Ö½Ú£©	D£¨1×Ö½Ú£©	·Ç×èÈû
+Ê±¼ä	N0hhmmss£¨8×Ö½Ú£©	N£¨1×Ö½Ú£©	·Ç×èÈû
+ÎÂ¶È	Tnnb£¨4×Ö½Ú£©	T£¨1×Ö½Ú£©	·Ç×èÈû
+·§	Vnnb£¨4×Ö½Ú£©	V£¨1×Ö½Ú£©	·Ç×èÈû
+²½½øµç»ú	Snnkpppp£¨8×Ö½Ú£©	S£¨1×Ö½Ú£©	·Ç×èÈû£»×èÈû
+Èä¶¯±Ã	Pnnktttt£¨8×Ö½Ú£©	P£¨1×Ö½Ú£©	·Ç×èÈû£»×èÈû
+Ðý×ª±Ã	Rnnctttt£¨8×Ö½Ú£©	R£¨1×Ö½Ú£©	·Ç×èÈû£»×èÈû
+ÑÓÊ±	Wxxxxxxx£¨8×Ö½Ú£©	W£¨1×Ö½Ú£©	×èÈû
 ²ÎÊý¶¨Òå£º
 ´úºÅ	º¬Òå	·¶Î§
+yymmdd	ÄêÔÂÈÕ	[00~99]Äê£¬[01~12]ÔÂ£¬[01~31]ÈÕ£¬ 
+hhmmss	Ê±·ÖÃë	[00~23]Ê±£¬[00~59]·Ö£¬[00~59]Ãë
 nn	¹¦ÄÜ¿é±àºÅ	[01~99]
 b	¹Ø±Õ»ò´ò¿ª×´Ì¬	[0,1]£¬0¹Ø±Õ£»1´ò¿ª
 c	ËÙ¶È´óÐ¡£ºµÍ¡¢ÖÐ¡¢¸ß	[0,1,2]
-pppp	Î»ÖÃ»òÓëÒºÃæ¾àÀë	0nnn£ºÎ»ÖÃ£»1nnn£º½øÈëÒºÃæ²¢ÒÆ¶¯£¬2nnn£ºÀë¿ªÒºÃæ²¢ÒÆ¶¯£¬3nnn£º×ª¶¯Ê±¼ä(100ms)£¬4nnn£ºµ½Ô­µã¾àÀë(mm)
-k	ËÙ¶È£¨µÍ¡¢ÖÐ¡¢¸ß£©ºÍ·½Ïò	[0,1,2]+ [0,4]´óÓÚ4´ú±í·´×ª
+pppp	Î»ÖÃ»òÓëÒºÃæ¾àÀë	0nnn£ºÎ»ÖÃ£»1nnn£º½øÈëÒºÃæ²¢ÒÆ¶¯£¬2nnn£ºÀë¿ªÒºÃæ²¢ÒÆ¶¯£¬3nnn£º×ª¶¯Ê±¼ä(100ms)£¬4nnn£ºµ½Ô­µã¾àÀë(mm)¡£Ô­µã¶¨Òå£¿
+k	ËÙ¶È£¨µÍ¡¢ÖÐ¡¢¸ß£©ºÍ·½Ïò	[0,1,2]+ [0,4]£¬´óÓÚµÈÓÚ4´ú±í·´×ª
 tttt	´ú±ítttt*0.1Ãë	[0001~9999]
 xxxxxxx	´ú±íxxxxxxx *1ºÁÃë	[0000001~9999999]
-yymmdd	ÄêÔÂÈÕ	[00~99]Äê£¬[01~12]ÔÂ£¬[01~31]ÈÕ£¬ 
-hhmmss	Ê±·ÖÃë	[00~23]Ê±£¬[00~59]·Ö£¬[00~59]Ãë
 ÀýÈç£º[V021; S0310003]//¿ª·§2£¬²½½øµç»ú3ÖÐËÙÔËÐÐµ½Î»ÖÃ3£»(P0130020; W0005000)//Èä¶¯±Ã1µÍËÙ·´×ª2Ãë£¬ÑÓÊ±5Ãë
 ¶þ¡¢ÈÎÎñ£ºÈÎÎñÖ®¼äÒª´«µÝÐÅÏ¢£¬ËùÓÐÈÎÎñÒ»´Î´´½¨Íê³É£¬Ã¿¸öÈÎÎñÓÐÒ»¸ö×´Ì¬»ú£¬ÓÐ¶¨Ê±¸´Î»»úÖÆ
 Main£ºÓ²¼þ³õÊ¼»¯£¬´´½¨Ö÷ÈÎÎñstart_task£¬Æô¶¯µ÷¶ÈÆ÷
@@ -33,7 +33,7 @@ HMI½çÃæUARTÍ¨Ñ¶£º(hmi_task)¸ºÔð½çÃæÏÔÊ¾¡£·¢ËÍÃüÁî¸øHMI½çÃæ£¬½ÓÊÕHMI½çÃæÏûÏ¢£¬½ÓÊ
 
 ´®¿ÚÍ¨Ñ¶£º(com_task)½ÓÊÕ¿ØÖÆÃüÁî£¬·µ»ØÐÅÏ¢¡£½ÓÊÕ´®¿ÚÏûÏ¢£¬·¢ËÍÏûÏ¢¸ø´®¿Ú
 
-·§¿ØÖÆ¡¢²½½øµç»ú¿ØÖÆ¡¢±Ã¿ØÖÆ£º(valve_task£¬stepmoto_task£¬pump_task)½ÓÊÕ·§¿ØÖÆÐÅÏ¢£¨¿ª¹Ø£©£¬½ÓÊÕ²½½øµç»ú¿ØÖÆÐÅÏ¢£¨ËÙ¶È£¬Î»ÖÃ£©£¬½ÓÊÕ±Ã¿ØÖÆÐÅÏ¢£¨ËÙ¶È£¬·½Ïò£¬Ê±¼ä£©£»·µ»Ø¸÷Ó²¼þ×´Ì¬
+·§¿ØÖÆ¡¢²½½øµç»ú¿ØÖÆ¡¢±Ã¿ØÖÆ£º(valve_task£¬step_task£¬pump_task)½ÓÊÕ·§¿ØÖÆÐÅÏ¢£¨¿ª¹Ø£©£¬½ÓÊÕ²½½øµç»ú¿ØÖÆÐÅÏ¢£¨ËÙ¶È£¬Î»ÖÃ£©£¬½ÓÊÕ±Ã¿ØÖÆÐÅÏ¢£¨ËÙ¶È£¬·½Ïò£¬Ê±¼ä£©£»·µ»Ø¸÷Ó²¼þ×´Ì¬
 
 CRP¼ì²âÁ÷³Ì£º(crp_task)
 
@@ -44,8 +44,8 @@ RBC¼ì²âÁ÷³Ì£º(rbc_task)£¬Èý¸ö±ÈÉ«Ãó×´Ì¬»ú·ÖÅä
 AD²ÉÑù123£º(adc_task)Èý¸ö±ÈÉ«Ãó¿ÉÒÔÍ¬Ê±½øÐÐ£¬Êý¾ÝÓÐÐ§/ÎÞÐ§£¬¾ßÌåÊý¾Ý£¬Êý¾Ý´æ´¢
 
 
-
 ÇåÏ´±ÈÉ«Ãó123£º(wash_cuvette_task) Èý¸ö±ÈÉ«ÃóÖ»ÄÜÒ»¸öÒ»¸öÇåÏ´
+
 
 Î¬»¤£º(maintain_task)
 
@@ -72,8 +72,9 @@ HMI²âÊÔ£º
 ËÙ¶È²âÊÔ£º²½½øµç»ú£¬Ðý×ª±Ã£¬Èä¶¯±Ã
 
 ¾«¶È²âÊÔ£º²½½øµç»ú
+ÄÄÐ©²½½øµç»ú¿ÉÒÔ¸´ÓÃ£¿
 
-¿ª¹Ø²âÊÔ£º¶þÍ¨·§£¬ÈýÍ¨·§
+¿ª¹Ø²âÊÔ£º74HC59¿É¿¿ÐÔ²âÊÔ£¬¶þÍ¨·§£¬ÈýÍ¨·§¿ª¹Ø¡¢¶ÔµçÂ·µÄ³å»÷¡¢µçÁ÷¸ºÔØÄÜÁ¦
 
 AD²âÊÔ£º
 

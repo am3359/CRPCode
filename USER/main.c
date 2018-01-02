@@ -57,6 +57,15 @@ TaskHandle_t Step_Task_Handler;
 void step_task(void *pvParameters);
 
 //任务优先级
+#define CRP_TASK_PRIO      6
+//任务堆栈大小    
+#define CRP_STK_SIZE       256  
+//任务句柄
+TaskHandle_t CRP_Task_Handler;
+//任务函数
+void crp_task(void *pvParameters);
+
+//任务优先级
 #define START_TASK_PRIO        1
 //任务堆栈大小    
 #define START_STK_SIZE         128  
@@ -64,6 +73,24 @@ void step_task(void *pvParameters);
 TaskHandle_t Start_Task_Handler;
 //任务函数
 void start_task(void *pvParameters);
+
+#define HMI_OTHER      0
+#define HMI_START      1
+#define HMI_CHECK      2
+#define HMI_ANALY      3
+#define HMI_QC         4
+#define HMI_SET        5
+#define HMI_SYS        6
+#define HMI_OFF        7
+
+#define CRP_OTHER      0
+#define CRP_START      1
+#define CRP_CHECK      2
+#define CRP_ANALY      3
+#define CRP_QC         4
+#define CRP_SET        5
+#define CRP_SYS        6
+#define CRP_OFF        7
 
 #define COM_Q_NUM      4    //发送数据的消息队列的数量 
 #define HMI_Q_NUM     16    //发送数据的消息队列的数量 
@@ -93,18 +120,18 @@ u32 GetPWMCnt;
 int main(void)
 {
     //所有硬件初始化
-    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);//设置系统中断优先级分组4
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);//设置系统中断优先级分组4，表示支持0-15级抢占优先级，不支持子优先级。
     
     delay_init(168);  //初始化延时函数
     UART1_Init(115200);    //串口初始化波特率为115200
-    USART3_Init(115200);//9600
+    USART3_Init(9600);//115200
     
 //  TIM3_Init();
     
-    HC595Init();//??
-    StepMotoInit();
+    HC595Init();//??检查时序是否可靠，变化时是否进入临界区
+    StepMotoInit();//??检查时序是否可靠，变化时是否进入临界区
 
-
+//    printf("Power On\r\n");
     
 //  TIM_Cmd(TIM3, DISABLE);
 //  GetPWMCnt  = TIM_GetCounter(TIM3);
@@ -162,7 +189,14 @@ void start_task(void *pvParameters)
                 (void*          )NULL,
                 (UBaseType_t    )STEP_TASK_PRIO,
                 (TaskHandle_t*  )&Step_Task_Handler);
-               
+    //创建crp_task任务
+    xTaskCreate((TaskFunction_t )crp_task,
+                (const char*    )"crp_task",
+                (uint16_t       )CRP_STK_SIZE,
+                (void*          )NULL,
+                (UBaseType_t    )CRP_TASK_PRIO,
+                (TaskHandle_t*  )&CRP_Task_Handler);
+                
     vTaskDelete(Start_Task_Handler); //删除开始任务
     taskEXIT_CRITICAL();            //退出临界区
 }
@@ -309,6 +343,95 @@ void hmi_task(void *pvParameters)
 {//uart3通讯
     u8 buffer[HMI_REC_LEN];
     BaseType_t err;
+    
+    u8 command[12];
+    
+    u32 PreviousState = HMI_OTHER;
+    u32 CurrentState  = HMI_OTHER;
+    u32 NextState     = HMI_OTHER;
+    while(1)
+    {
+        switch(CurrentState)
+        {
+            case HMI_START:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+                    Uart3_PutString("page start\r\n", sizeof("page start\r\n")-1);
+//                    memcpy(command,"1021", 4);
+//                    command[4]='\0';
+//                    xQueueSend(Valve_Queue,command,10);//向Valve_Queue队列中发送数据
+//                    memcpy(command,"10140400", 8);
+//                    command[8]='\0';
+//                    xQueueSend(Step_Queue,command,10);//向Valve_Queue队列中发送数据
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+                    //需要完成：步进电机运动，光电信号（光隔和红光）测试，阀，泵等检测
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    NextState = HMI_CHECK;
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+            case HMI_CHECK:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+                    Uart3_PutString("page check\r\n", sizeof("page check\r\n")-1);
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+                    //需要完成：清洗等
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    NextState = HMI_ANALY;
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_ANALY:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+                    Uart3_PutString("page analyse_0\r\n", sizeof("page analyse_0\r\n")-1);
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_QC:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_SET:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_SYS:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_OFF:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case HMI_OTHER:
+           default:
+                vTaskDelay(pdMS_TO_TICKS(2000));
+                CurrentState = HMI_START;
+                NextState    = HMI_START;
+                
+                break;
+
+        }
+        
+    }
+    
+    
     while(1)
     {
         if(Hmi_Queue!=NULL)
@@ -319,6 +442,7 @@ void hmi_task(void *pvParameters)
             if(err == pdTRUE)
             {//HMI命令解析
                 //printf("0%s0",buffer);
+                Uart3_PutString("page start", sizeof("page start")-1);
             }
         }
 
@@ -383,11 +507,13 @@ void valve_task(void *pvParameters)
 
 //                STATE_END                                                       //} break;
             default:
-                CurrentState = 1;
-                NextState    = 1;
-                valve_state = 0;
+                vTaskDelay(pdMS_TO_TICKS(500));
+                valve_state = 0;//所有阀关闭
                 printf("阀状态:%#x\r\n",valve_state);
                 SwitchOut(valve_state);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                CurrentState = 1;
+                NextState    = 1;
                 break;
 
         }
@@ -433,6 +559,83 @@ void step_task(void *pvParameters)
                 
             }
         }
+    }
+}
+
+
+void crp_task(void *pvParameters)
+{
+    u32 PreviousState = CRP_START;
+    u32 CurrentState  = CRP_START;
+    u32 NextState     = CRP_START;
+    while(1)
+    {
+        switch(CurrentState)
+        {
+            case CRP_START:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+            case CRP_CHECK:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_ANALY:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_QC:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_SET:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_SYS:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_OFF:
+                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+                STATE_END                                                       //} break;
+           case CRP_OTHER:
+           default:
+                CurrentState = 1;
+                NextState    = 1;
+                break;
+
+        }
+        
     }
 }
 
