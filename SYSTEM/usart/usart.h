@@ -18,6 +18,7 @@ void UART1_Init(u32 bound);
 void Uart1_PutString(u8 * buf , u8 len);
 void USART3_Init(u32 bound);
 void Uart3_PutString(char * buf , u8 len);
+void Uart3_HMICmd(char * buf , u8 len);
 #endif
 
 

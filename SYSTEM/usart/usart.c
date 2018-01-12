@@ -296,4 +296,16 @@ void Uart3_PutString(char * buf , u8 len)
     }
 }
 
+void Uart3_HMICmd(char * buf , u8 len)
+{
+    char i;
+    for(i=0;i<len;i++)
+    {
+        Uart3_PutChar(*buf++);
+    }
+    Uart3_PutChar(0xff);
+    Uart3_PutChar(0xff);
+    Uart3_PutChar(0xff);
+}
+
 #endif
