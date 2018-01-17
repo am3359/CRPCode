@@ -59,7 +59,7 @@ extern u16 W25QXX_TYPE;					//¶¨ÒåW25QXXÐ¾Æ¬ÐÍºÅ
 #define W25X_EnableWriteStatusReg 0x50
 #define W25X_ByteProgram        0x02
 
-void W25QXX_Init(void);
+u16 W25QXX_Init(void);
 u16  W25QXX_ReadID(void);  	    		//¶ÁÈ¡FLASH ID
 u8	 W25QXX_ReadSR(void);        		//¶ÁÈ¡×´Ì¬¼Ä´æÆ÷ 
 void W25QXX_Write_SR(u8 sr);  			//Ð´×´Ì¬¼Ä´æÆ÷

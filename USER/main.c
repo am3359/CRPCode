@@ -111,24 +111,24 @@ QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
 QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
 QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
 
-//#define COM_WAIT   1       //等待com命令
-//#define COM_INST   2       //com命令(instruct)解析
-
-//#define HMI_WAIT   1       //等待hmi命令
-
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
+u8 getDir(u8 * buf1,u8 * buf2,u8 pos);
+FRESULT scan_files (char* path);
 u32 GetPWMCnt;
 FATFS fs;
-FIL file;                   //文件1
-//FIL ftemp;                  //文件2.
-UINT br,bw;                 //读写变量
-FILINFO fileinfo;           //文件信息
-DIR dir;                    //目录
+FIL file;                        //文件1
+//FIL ftemp;                       //文件2.
+UINT br,bw;                      //读写变量
+FILINFO fileinfo,fileinfo1;      //文件信息
+DIR dir,dir1;                    //目录
 
-u8 filename[32];
+u8 filename[32],filename1[32];//??
 FRESULT fres;
+u8 curDir[32]="0:/TEST";
+u8 curFilename[32]="0001";
+u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
 //------------------MAIN 开始------------------
 int main(void)
 {
@@ -145,10 +145,10 @@ int main(void)
     HC595Init();//??检查时序是否可靠，变化时是否进入临界区
     StepMotoInit();//??检查时序是否可靠，变化时是否进入临界区
 
-    W25QXX_Init();//??检查失败需要返回一个标志，在开机自检时显示出来
+    W25QXX_Init();//??检查失败需要返回一个标志，在开机自检时显示出来  if(W25QXX_Init() != W25Q128) error
     
     My_RTC_Init();//设置RTC
-    
+    delay_us(2000000);
     fres=f_mount(&fs,"0:",1);                 //立即挂载FLASH.
     if(fres == FR_NO_FILESYSTEM) {            //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
         //??在HMI里设置可以清除所有记录的功能，直接格式化flash
@@ -158,14 +158,21 @@ int main(void)
             //f_setlabel((const TCHAR *)"0:CRP");    //设置Flash磁盘的名字为：CRP
             printf("格式化完成\r\n");         //格式化完成
         } else printf("格式化失败...\r\n");    //格式化失败
-        delay_ms(1000);
+        delay_us(1000000);
     }
+    fres=f_mkdir((const TCHAR *)curDir);        //创建文件夹//??已经存在会不会冲突
+    if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
+    else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
+    else printf("创建文件夹%s失败\r\n",curDir);         //创建文件夹失败
+    
 #if _USE_LFN  //1
     fileinfo.lfname = (TCHAR *)filename;
     fileinfo.lfsize = 32;//文件名长度不能超过32字节
+    fileinfo1.lfname = (TCHAR *)filename1;
+    fileinfo1.lfsize = 32;//文件名长度不能超过32字节
 #endif
 //    printf("Power On\r\n");
-    
+//    printf("数字【%d】表示为【%d】\r\n",1000,pdMS_TO_TICKS(1000));
 //  TIM_Cmd(TIM3, DISABLE);
 //  GetPWMCnt  = TIM_GetCounter(TIM3);
 //  TIM_SetCounter(TIM3, 0); 
@@ -278,10 +285,10 @@ void com_task(void *pvParameters)
                                     CorrectDate(year,&month,&date);
                                     CorrectTime(&hour,&min,&sec);
                                     week=RTC_Get_Week(2000 + year,month,date);
-									if(hour < 12)//??
-										RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
-									else
-										RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
+                                    if(hour < 12)//??
+                                        RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
+                                    else
+                                        RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                                     RTC_Set_Date(year,month,date,week);    //设置日期
                                 }
                                 printf("D20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
@@ -290,83 +297,180 @@ void com_task(void *pvParameters)
                                 if (c[i][1] == 1) {//查询磁盘信息、文件列表  ??可以显示整个磁盘的所有文件夹和文件
                                     exf_getfree((u8*)"0:",&total,&free);
                                     printf("0磁盘总容量：%dKB，剩余：%dKB\r\n", total,free);
-									//http://www.openedv.com/posts/list/7572.htm
-									//?? 参考u8 mf_scan_files(u8 * path) 
-									//??fileinfo.fattrib=AM_DIR AM_ARC
-                                } else if (c[i][1] == 8) {//读、写、删除文件
-                                    if(buffer[c[i][0]+1]=='0'){//读
-                                        m=(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
-                                        fres =f_opendir(&dir, (const TCHAR*)"0:/TEST");
-                                        if (fres == FR_OK) {
-                                            for(j=0;j<m;j++) {
-                                                fres = f_readdir(&dir, &fileinfo);                   //读取目录下的一个文件
-                                                if (fres != FR_OK || fileinfo.fname[0] == 0) {        //错误了/到末尾了,退出
-                                                    //printf("错误或到末尾了,退出\r\n");
-                                                    break;
-                                                }
-                                                strcpy ((char *)tbuf, "0:/TEST/");
-#if _USE_LFN
-                                                strcat((char *)tbuf, fileinfo.lfname);
-#else          
-                                                strcat((char *)tbuf, fileinfo.fname);//??有没有读出文件名
-#endif
-                                                printf("%s", tbuf);//打印文件名 
-                                                fres = f_open(&file, (const TCHAR*)tbuf, FA_OPEN_EXISTING | FA_READ);
-                                                if(fres == FR_OK) {//FR_OK 打开文件成功
-                                                    printf("  [ ");
-                                                    do{
-                                                        fres = f_read(&file, tbuf, 60, &br);//读取60个字节，br返回读取的字节数
-                                                        tbuf[br]=0;
-                                                        if(br) {//br>0，表示还有数据
-                                                            printf("%s", tbuf);//打印
-                                                        } else {
+                                    //http://www.openedv.com/posts/list/7572.htm
+                                    //?? 参考u8 mf_scan_files(u8 * path) 
+                                    //??fileinfo.fattrib=AM_DIR AM_ARC
+                                    
+                                    printf("当前目录:\r\n%s->\r\n", curDir);
+                                    fres =f_opendir(&dir, (const TCHAR*)curDir);//??文件，目录都会列出来吗?
+                                    if (fres == FR_OK) {
+                                        for (;;) {
+                                            fres = f_readdir(&dir, &fileinfo);                   //读取目录下的一个文件
+                                            if (fres != FR_OK || fileinfo.fname[0] == 0) {        //错误了/到末尾了,退出
+                                                //printf("错误或到末尾了,退出\r\n");
+                                                break;
+                                            }
+                                            sprintf((char *)tbuf,"%s/%s",curDir,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);
+                                            
+                                            if (fileinfo.fattrib & AM_DIR) {//是目录
+                                                printf("%s [1D]\r\n", tbuf);//打印目录
+                                                fres =f_opendir(&dir1, (const TCHAR*)tbuf);//??文件，目录都会列出来吗?
+                                                if (fres == FR_OK) {
+                                                    j = strlen((char *)tbuf);
+                                                    for (;;) {
+                                                        fres = f_readdir(&dir1, &fileinfo1);                   //读取目录下的一个文件
+                                                        if (fres != FR_OK || fileinfo1.fname[0] == 0) {        //错误了/到末尾了,退出
+                                                            //printf("错误或到末尾了,退出\r\n");
                                                             break;
                                                         }
-                                                    }while (fres==FR_OK);
-                                                    printf(" ]\r\n");
-                                                    fres=f_close(&file);
+                                                        sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo1.lfname ? fileinfo1.lfname : fileinfo1.fname);
+                                                        //printf("%s\r\n", tbuf);//打印文件
+                                                        if (fileinfo1.fattrib & AM_DIR) {//是目录
+                                                            printf("%s [2D]\r\n", tbuf);//打印目录
+                                                        }else {
+                                                            printf("%s [2F]\r\n", tbuf);//打印文件
+                                                        }
+                                                        tbuf[j] = 0;
+                                                    }
                                                 }
+                                            } else {
+                                                printf("%s [1F]\r\n", tbuf);//打印文件
                                             }
                                         }
-                                    } else if(buffer[c[i][0]+1]=='1'){//写??连写8次系统奔溃 Error:FreeRTOS\queue.c,2511，把_USE_LFN改成1错误消失，问题应该解决了
-                                        m=(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
-                                        fres=f_mkdir("0:/TEST");        //创建TEST文件夹//??已经存在会不会冲突
-                                        RTC_Get_Time(&hour,&min,&sec,&ampm);//得到时间    
-                                        RTC_Get_Date(&year,&month,&date,&week);//得到日期
-                                        sprintf((char*)tbuf,"0:/TEST/TT20%02d%02d%02d-%02d%02d%02d.txt",year,month,date,hour,min,sec);
-                                        fres = f_open(&file, (const TCHAR*)tbuf, FA_CREATE_ALWAYS | FA_WRITE);
-                                        //memset(tbuf,0,64);
-                                        //for(j=0;j<4;j++) tbuf[j]=buffer[c[i][0]+4+j];
-                                        if(fres == FR_OK) {
-                                            for(j=0;j<m;j++) {
-                                                //fres=f_write(&file,tbuf,4,&bw);
-                                                fres=f_write(&file,buffer+c[i][0]+4,4,&bw);
+                                    }
+                                    //scan_files ("0:");
+                                } else if (c[i][1] == 2) {//F0,F1,F2,F3,F4
+                                    if (buffer[c[i][0]+1]=='0'){//读
+                                        if(curFileFlag==0) {
+                                            sprintf((char *)tbuf,"%s/%s", curDir,curFilename);
+                                            printf("当前文件名:%s,标志:%d\r\n", tbuf,curFileFlag);//打印文件名 
+                                            fres = f_open(&file, (const TCHAR*)tbuf, FA_OPEN_EXISTING | FA_READ);
+                                            if(fres == FR_OK) {//FR_OK 打开文件成功  ??文件不存在呢
+                                                printf("文件内容:->\r\n");
+                                                do{
+                                                    //fres = f_read(&file, tbuf, 60, &br);//读取60个字节，br返回读取的字节数
+                                                    if(f_gets((TCHAR *)tbuf,60,&file) != 0)//读取一行 ??\n会变成\0吗 \r怎么办??
+                                                        printf("%s", tbuf);
+                                                }while ((!f_eof(&file))&&(!f_error(&file)));//??没有结束且没有发生错误
+                                                fres=f_close(&file);
+                                            } else if (fres == FR_NO_FILE){
+                                                printf("文件不存在\r\n");
                                             }
+                                        }
+                                    } else if (buffer[c[i][0]+1]=='1'){//写
+                                        if(curFileFlag==2) {
+                                            curFileFlag=0;
+                                            sprintf((char *)tbuf,"%s/%s", curDir,curFilename);
+                                            printf("当前文件名:%s,标志:%d\r\n", tbuf,curFileFlag);//打印文件名 
                                             fres=f_close(&file);
-                                            printf("写入文件%s\r\n",tbuf);
                                         }
-                                    }else if(buffer[c[i][0]+1]=='2'){//删除  ??删除文件会使串口无法连接，系统可能无法运行，把_USE_LFN改成1错误消失，问题应该解决了
-                                        m=(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
-                                        fres =f_opendir(&dir, (const TCHAR*)"0:/TEST");
-                                        if (fres == FR_OK) {
-                                            for(j=0;j<m;j++) {
-                                                fres = f_readdir(&dir, &fileinfo);                   //读取目录下的一个文件
-                                                if (fres != FR_OK || fileinfo.fname[0] == 0){        //错误了/到末尾了,退出
-                                                    //printf("错误或到末尾了,退出\r\n");
-                                                    break;
-                                                }
-                                                strcpy ((char *)tbuf, "0:/TEST/");
-#if _USE_LFN
-                                                strcat((char *)tbuf, fileinfo.lfname);
-#else          
-                                                strcat((char *)tbuf, fileinfo.fname);//??
-#endif
-                                                fres = f_unlink((const TCHAR*)tbuf);
-                                                if (fres == FR_OK)
-													printf("删除成功:%s\r\n", tbuf);//删除成功
-												else
-													printf("删除失败:%s\r\n", tbuf);//删除失败
+                                    } else if (buffer[c[i][0]+1]=='2'){//删??
+                                        if(curFileFlag==0) {
+                                            sprintf((char *)tbuf,"%s/%s", curDir,curFilename);
+                                            printf("当前文件名:%s,标志:%d\r\n", tbuf,curFileFlag);//打印文件名 
+                                            fres = f_unlink((const TCHAR*)tbuf);
+                                            if (fres == FR_OK)
+                                                printf("删除成功\r\n");//删除成功
+                                            else if (fres == FR_NO_FILE)
+                                                printf("文件不存在\r\n");//删除成功
+                                            else
+                                                printf("删除失败\r\n");//删除失败
+                                        }
+                                    } else if (buffer[c[i][0]+1]=='3'){//返回当前文件夹
+                                        printf("当前文件夹:%s,标志:%d\r\n", curDir,curFileFlag);//打印文件夹
+                                    } else if (buffer[c[i][0]+1]=='4'){//格式化磁盘
+                                        printf("建立文件系统...\r\n");        //格式化FLASH
+                                        fres=f_mkfs("0:",1,4096);             //格式化FLASH,1,盘符0,不需要引导区,8个扇区为1个簇
+                                        if(fres == FR_OK) {
+                                            //f_setlabel((const TCHAR *)"0:CRP");    //设置Flash磁盘的名字为：CRP
+                                            printf("格式化完成\r\n");         //格式化完成
+                                        } else printf("格式化失败...\r\n");    //格式化失败
+                                        vTaskDelay(pdMS_TO_TICKS(1000));
+                                        
+                                        strcpy((char *)curDir,"0:/TEST");
+                                        strcpy((char *)curFilename,"0001");
+                                        curFileFlag=0;
+                                        fres=f_mkdir((const TCHAR *)curDir);        //创建文件夹//??已经存在会不会冲突
+                                        if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
+                                        else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
+                                        else printf("创建文件夹%s失败\r\n",curDir);         //创建文件夹失败
+                                        printf("当前文件名%s/%s,标志:%d\r\n", curDir,curFilename,curFileFlag);                                        
+                                    }
+                                } else if (c[i][1] > 3) {//读、写、删除文件 
+                                    if(buffer[c[i][0]+1]=='0'){//读 [F0,A00010001U000000]  ??,判断
+                                        if(curFileFlag==0) {
+                                            if(c[i][1]-3 < 32) {//长度小于32
+                                                memcpy(curFilename, buffer+c[i][0]+3, c[i][1]-3);
+                                                curFilename[c[i][1]-3]='\0';//??最后一位不能漏掉
+                                            } else {//长度大于等于20，后面丢弃
+                                                memcpy(curFilename, buffer+c[i][0]+3, 31);
+                                                curFilename[31]='\0';//
+                                            }
 
+                                            sprintf((char *)tbuf,"%s/%s", curDir,curFilename);
+                                            printf("当前文件名:%s,标志:%d\r\n", tbuf,curFileFlag);//打印文件名 
+                                            fres = f_open(&file, (const TCHAR*)tbuf, FA_OPEN_EXISTING | FA_READ);
+                                            if(fres == FR_OK) {//FR_OK 打开文件成功  ??文件不存在呢
+                                                printf("文件内容:->\r\n");
+                                                do{
+                                                    //fres = f_read(&file, tbuf, 60, &br);//读取60个字节，br返回读取的字节数
+                                                    if(f_gets((TCHAR *)tbuf,60,&file) != 0)//读取一行 ??\n会变成\0吗 \r怎么办??
+                                                        printf("%s", tbuf);
+                                                }while ((!f_eof(&file))&&(!f_error(&file)));//??没有结束且没有发生错误
+                                                fres=f_close(&file);
+                                            } else if (fres == FR_NO_FILE){
+                                                printf("文件不存在\r\n");
+                                            }
+                                        }
+                                    } else if(buffer[c[i][0]+1]=='1'){//写?? [F1,ABCDEFG]
+                                        sprintf((char *)tbuf,"%s/%s", curDir,curFilename);
+                                        printf("当前文件名:%s,标志:%d\r\n", tbuf,curFileFlag);//打印文件名 
+                                        if(curFileFlag==0) {//第一次写先打开文件
+                                            fres = f_open(&file, (const TCHAR*)tbuf, FA_CREATE_ALWAYS | FA_WRITE);//??重名的会覆盖，没有的文件名直接创建
+                                            if(fres == FR_OK) {
+                                                curFileFlag=2;
+                                                memcpy(tbuf, buffer+c[i][0]+3, c[i][1]-3);//??
+                                                tbuf[c[i][1]-3]='\r';
+                                                tbuf[c[i][1]-2]='\n';
+                                                tbuf[c[i][1]-1]='\0';
+                                                //fres=f_write(&file,buffer+c[i][0]+3,c[i][0]-3,&bw);
+                                                f_puts((TCHAR *)tbuf,&file);//??
+                                                printf("写入数据:%s\r\n",tbuf);
+                                            }
+                                        } else if(curFileFlag==2) {//第n次写不用打开文件 
+                                                memcpy(tbuf, buffer+c[i][0]+3, c[i][1]-3);//??
+                                                tbuf[c[i][1]-3]='\r';
+                                                tbuf[c[i][1]-2]='\n';
+                                                tbuf[c[i][1]-1]='\0';
+                                            //fres=f_write(&file,buffer+c[i][0]+3,c[i][0]-3,&bw);
+                                            f_puts((TCHAR *)tbuf,&file);//??
+                                            printf("写入数据:%s\r\n",tbuf);
+                                        }
+                                    } else if(buffer[c[i][0]+1]=='3'){//设置当前文件夹 [F3,0:/CRP]
+                                        if(curFileFlag==0) {
+                                            if(c[i][1]-3 < 32) {//长度小于32
+                                                memcpy(curDir, buffer+c[i][0]+3, c[i][1]-3);
+                                                curDir[c[i][1]-3]='\0';//??最后一位不能漏掉
+                                            } else {//长度大于等于12，后面丢弃
+                                                memcpy(curDir, buffer+c[i][0]+3, 31);
+                                                curDir[31]='\0';//
+                                            }
+
+                                            if(strlen((const TCHAR *)curDir)<=3) {
+                                                strcpy ((char *)curDir, "0:");
+                                                printf("当前是根目录%s\r\n",curDir);
+                                            } else {
+                                                m=1;
+                                                do{
+                                                    j=getDir(curDir,tbuf,m);
+                                                    fres=f_mkdir((const TCHAR *)tbuf);        //创建文件夹//??已经存在会不会冲突//??一次可以创建多层文件夹吗？
+                                                    if(fres == FR_OK) printf("创建文件夹%s\r\n",tbuf);         //创建文件夹完成
+                                                    else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",tbuf);
+                                                    else printf("创建文件夹%s失败\r\n",tbuf);         //创建文件夹失败
+                                                    m++;
+                                                }while(j);
+                                                strcpy((char *)curDir,(const char *)tbuf);
+                                                printf("当前目录:%s,标志:%d\r\n", curDir,curFileFlag);//打印目录
                                             }
                                         }
                                     }
@@ -386,10 +490,10 @@ void com_task(void *pvParameters)
                                     CorrectDate(year,&month,&date);
                                     CorrectTime(&hour,&min,&sec);
                                     week=RTC_Get_Week(2000 + year,month,date);
-									if(hour < 12)//??
-										RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
-									else
-										RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
+                                    if(hour < 12)//??
+                                        RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
+                                    else
+                                        RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                                     RTC_Set_Date(year,month,date,week);    //设置日期
                                 }
                                 printf("N20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
@@ -474,10 +578,8 @@ void hmi_task(void *pvParameters)
     u8 buffer[HMI_REC_LEN];
     BaseType_t res;
     u8 year,month,date,week;
-    u8 hour,min,sec,ampm;
+    u8 hour,min,sec,time_valid;//,ampm;
     u32 start_task;
-    
-    u8 time_valid;
     
 //    u8 command[12];
     
@@ -589,7 +691,7 @@ void hmi_task(void *pvParameters)
                         } else {//无数据
                             start_task++;
                         }
-                    }else {
+                    } else {
                         if(time_valid == 0x7F){//??需要判断time_valid为127才能表示时间数据有效
                             //printf("time_valid:%d\r\n",time_valid);
                             printf("\r\n时间有效20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
@@ -597,12 +699,12 @@ void hmi_task(void *pvParameters)
                             CorrectDate(year,&month,&date);
                             CorrectTime(&hour,&min,&sec);
                             week=RTC_Get_Week(2000 + year,month,date);
-							if(hour < 12)//?? 
-								RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
-							else
-								RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
+                            if(hour < 12)//?? 
+                                RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
+                            else
+                                RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                             RTC_Set_Date(year,month,date,week);    //设置日期
-                        }
+                        }//否则显示读取时间失败
                         NextState = HMI_CHECK;
                     }
                     vTaskDelay(pdMS_TO_TICKS(20));//至少保证20 的HMI反馈时间
@@ -616,11 +718,10 @@ void hmi_task(void *pvParameters)
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     //需要完成：清洗等
-                    vTaskDelay(pdMS_TO_TICKS(2000));
                     
                     NextState = HMI_ANALY;
                 STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-                    
+                    vTaskDelay(pdMS_TO_TICKS(2000));//至少保证10
                 STATE_END                                                       //} break;
            case HMI_ANALY:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
@@ -1091,12 +1192,19 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                 //*n=k;
                 steps=2;
             } else {
-                if(buf[i] >= 'a' && buf[i] <= 'z') {//转成大写
-                    buf[i]+='A'-'a';
+                if(j==0) {//只判断第一个字母有效性，内容不判断
+                    if(buf[i] >= 'a' && buf[i] <= 'z') {//首字母转成大写
+                        buf[i] -= 'a' - 'A';//??
+                    }
+                    if(buf[i] == 'D'|| buf[i] == 'N'|| buf[i] == 'P'|| buf[i] == 'R'||
+                       buf[i] == 'S'|| buf[i] == 'T'|| buf[i] == 'V'|| buf[i] == 'W'||
+                       buf[i] == 'F'){//第一个字母有效
+
+                    } else {//第一个字母无效
+                        valid=0;
+                    }
                 }
-                if(buf[i] == 'D'|| buf[i] == 'N'|| buf[i] == 'P'|| buf[i] == 'R'||
-                   buf[i] == 'S'|| buf[i] == 'T'|| buf[i] == 'V'|| buf[i] == 'W'||
-                   buf[i] == 'F'){//??F需要重新写
+                /*{//??F需要重新写
                     if(j) {//后面必须是数字，特殊字母无效
                         valid=0;
                     }
@@ -1106,7 +1214,7 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                     }
                 } else {//出现字母和数字之外的字符都会使当前命令无效
                     valid=0;
-                }
+                }*/
                 j++;
             }
         } else {
@@ -1133,6 +1241,47 @@ u8 str_len(u8 *str)
 //    return i;
 }
 
+u8 getDir(u8 * buf1,u8 * buf2,u8 num)
+{
+    u8 i,j,k,l,m;//,res;
+    l=strlen((const char *)buf1);
+    //res=0;
+    i=0;
+    j=0;
+    k=0;
+    while(i<l){//i数量小于长度l
+        //"0://test//20180101///"
+        if (*(buf1+i) == '/') {
+            m=0;
+            while(*(buf1+i+m+1) == '/') m++;
+            i+=m;
+            k++;
+            if(k >= (num+1)){
+                //*(buf2+j)='\0';
+                //res=1;
+                break;
+            } else {
+                *(buf2+j)='/';
+                j++;
+            }
+        }
+        else {
+            *(buf2+j)=*(buf1+i);
+            j++;
+        }
+        i++;
+    }
+    
+    *(buf2+j)='\0';
+    
+    if (i == (l-1)){
+        if (*(buf1+i) == '/') return 0;
+    }
+    else if (i<l) return 1;
+    
+    return 0;
+}
+
 //得到磁盘剩余容量
 //drv:磁盘编号("0:"/"1:")
 //total:总容量     （单位KB）
@@ -1157,3 +1306,41 @@ u8 exf_getfree(u8 *drv,u32 *total,u32 *free)
     }
     return res;
 }
+
+//FRESULT scan_files (char* path)
+//{
+//    FRESULT res;
+//    u32 i[8],j;//最多找8层
+//    char fn[64],tmppath[64];
+//    strcpy((char *)tmppath,(char *)path);
+//    for(j=0;j<8;j++) {
+//        res = f_opendir(&dir, (TCHAR*)tmppath);
+//        if (res == FR_OK) {
+//            i[j] = strlen(tmppath);
+//            {
+//                res = f_readdir(&dir, &fileinfo);
+//                if (res != FR_OK || fileinfo.fname[0] == 0) break;
+//                if (fileinfo.fname[0] == '.') continue;
+//#if _USE_LFN
+//                strcpy((char *)fn,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//strcat((char *)fn, fileinfo.lfname);
+//#else          
+//                strcpy((char *)fn,fileinfo.fname);//strcat((char *)fn, fileinfo.fname);//短文件名：TT2018~1.TXT
+//#endif
+//                if (fileinfo.fattrib & AM_DIR) {//是目录
+//                    strcat(tmppath,"/");
+//                    strcat(tmppath,fn);
+//                    //sprintf(&tmppath[i], "/%s", fn);
+//                    printf("%s\n", tmppath);
+//                    res = scan_files(tmppath);
+//                    if (res != FR_OK) break;
+//                    tmppath[i[j]] = 0;
+
+//                } else {
+//                    printf("%s/%s\n", tmppath, fn);
+//                }
+//            }
+//        }
+//    }
+
+//   return res;
+//}

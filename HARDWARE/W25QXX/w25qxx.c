@@ -27,7 +27,7 @@ u16 W25QXX_TYPE;//=W25Q128;	//默认是W25Q128
 //容量为16M字节,共有128个Block,4096个Sector 
 													 
 //初始化SPI FLASH的IO口
-void W25QXX_Init(void)
+u16 W25QXX_Init(void)
 { 
     GPIO_InitTypeDef  GPIO_InitStructure;
  
@@ -45,6 +45,7 @@ void W25QXX_Init(void)
     SPI1_Init();		   			//初始化SPI
     SPI1_SetSpeed(SPI_BaudRatePrescaler_4);		//设置为21M时钟,高速模式 
     W25QXX_TYPE=W25QXX_ReadID();	//读取FLASH ID.
+    return W25QXX_TYPE;
 }  
 
 //读取W25QXX的状态寄存器
