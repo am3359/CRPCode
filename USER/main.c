@@ -111,7 +111,7 @@ QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
 QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
 QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
 
-#define LEVEL          8
+#define LEVEL          8    //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
 
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
@@ -246,7 +246,7 @@ void start_task(void *pvParameters)
 //com_task任务函数
 void com_task(void *pvParameters)
 {//uart1通讯
-    u8 tbuf[64];//??__align(4) 
+    u8 tbuf[64];//??__align(4)  //??注意tbuf的大小要能放得下最深的文件名绝对路径
     u8 year,month,date,week;
     u8 hour,min,sec,ampm;
     
@@ -263,8 +263,8 @@ void com_task(void *pvParameters)
     u32 total,free;
     
     
-    u8 l[LEVEL];
-    DIR dir_a[LEVEL]; //目录缓冲
+    u8 l[LEVEL];        //l[]保存每层文件长度，返回上级目录时用
+    DIR dir_a[LEVEL];   //FATFS使用的目录结构，只有这个比较占内存需要LEVEL*36字节
     while(1) {
         if(Com_Queue!=NULL) {
             memset(buffer,0,COM_REC_LEN);    //清除缓冲区
@@ -312,27 +312,25 @@ void com_task(void *pvParameters)
                                     m = 0;
                                     j = 1;
                                     printf("当前目录:\r\n%s->\r\n", tbuf);
-                                    while(1) {
+                                    while(1) {                                                 //只有向下一层文件夹搜索时才打开执行
                                         if ( j > m ) {
-                                            f_opendir(&dir_a[j-1], (TCHAR*)tbuf);
+                                            f_opendir(&dir_a[j-1], (TCHAR *)tbuf);
                                             l[j-1] = strlen((char *)tbuf);
                                         }
                                         m = j;
-                                        {
-                                            f_readdir(&dir_a[j-1], &fileinfo);                 //读取目录下的一个文件
-                                            if (fileinfo.fname[0] == 0) {                      //到末尾了,退出 //错误了/fres != FR_OK || 
-                                                if (j>1) j--;
-                                                else break;
-                                                tbuf[l[j-1]] = 0;
-                                            }else{
-                                                sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);
-                                                if (fileinfo.fattrib & AM_DIR) {               //是目录
-                                                    printf("%s [%dD]\r\n", tbuf,j);          //打印目录
-                                                    if (j<8) j++;
-                                                }else {
-                                                    printf("%s [%dF]\r\n", tbuf,j);          //打印文件
-                                                    tbuf[l[j-1]] = 0;
-                                                }
+                                        f_readdir(&dir_a[j-1], &fileinfo);                     //读取目录下的一个文件
+                                        if (fileinfo.fname[0] == 0) {                          //到末尾了,退出 //错误了/fres != FR_OK || 
+                                            if (j>1) j--;
+                                            else break;
+                                            tbuf[l[j-1]] = '\0';
+                                        }else{
+                                            sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//搜索到的文件或文件名连接成完整的路径
+                                            if (fileinfo.fattrib & AM_DIR) {                   //是目录
+                                                printf("%s [%dD]\r\n", tbuf,j);                //打印目录
+                                                if (j<8) j++;
+                                            }else {
+                                                printf("%s [%dF]\r\n", tbuf,j);                //打印文件
+                                                tbuf[l[j-1]] = '\0';
                                             }
                                         }
                                     }
@@ -400,7 +398,7 @@ void com_task(void *pvParameters)
                                             if(c[i][1]-3 < 32) {//长度小于32
                                                 memcpy(curFilename, buffer+c[i][0]+3, c[i][1]-3);
                                                 curFilename[c[i][1]-3]='\0';//??最后一位不能漏掉
-                                            } else {//长度大于等于20，后面丢弃
+                                            } else {//长度大于等于31，后面丢弃
                                                 memcpy(curFilename, buffer+c[i][0]+3, 31);
                                                 curFilename[31]='\0';//
                                             }
@@ -1241,9 +1239,8 @@ u8 str_len(u8 *str)
 
 u8 getDir(u8 * buf1,u8 * buf2,u8 num)
 {
-    u8 i,j,k,l,m;//,res;
+    u8 i,j,k,l,m;
     l=strlen((const char *)buf1);
-    //res=0;
     i=0;
     j=0;
     k=0;
@@ -1255,8 +1252,6 @@ u8 getDir(u8 * buf1,u8 * buf2,u8 num)
             i+=m;
             k++;
             if(k >= (num+1)){
-                //*(buf2+j)='\0';
-                //res=1;
                 break;
             } else {
                 *(buf2+j)='/';
