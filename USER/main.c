@@ -26,7 +26,7 @@
 //任务优先级
 #define COM_TASK_PRIO        10
 //任务堆栈大小    
-#define COM_STK_SIZE         256  
+#define COM_STK_SIZE         512  
 //任务句柄
 TaskHandle_t Com_Task_Handler;
 //任务函数
@@ -111,6 +111,8 @@ QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
 QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
 QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
 
+#define LEVEL          8
+
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
@@ -121,13 +123,13 @@ FATFS fs;
 FIL file;                        //文件1
 //FIL ftemp;                       //文件2.
 UINT br,bw;                      //读写变量
-FILINFO fileinfo,fileinfo1;      //文件信息
-DIR dir,dir1;                    //目录
+FILINFO fileinfo;                //文件信息
+DIR dir;                         //目录
 
-u8 filename[32],filename1[32];//??
+u8 filename[32];//64??
 FRESULT fres;
-u8 curDir[32]="0:/TEST";
-u8 curFilename[32]="0001";
+u8 curDir[64]="0:/TEST";//??
+u8 curFilename[32]="0001";//??
 u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
 //------------------MAIN 开始------------------
 int main(void)
@@ -164,12 +166,12 @@ int main(void)
     if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
     else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
     else printf("创建文件夹%s失败\r\n",curDir);         //创建文件夹失败
-    
+  //printf("DIR大小:%d",sizeof(DIR)*LEVEL);
 #if _USE_LFN  //1
     fileinfo.lfname = (TCHAR *)filename;
     fileinfo.lfsize = 32;//文件名长度不能超过32字节
-    fileinfo1.lfname = (TCHAR *)filename1;
-    fileinfo1.lfsize = 32;//文件名长度不能超过32字节
+//    fileinfo1.lfname = (TCHAR *)filename1;
+//    fileinfo1.lfsize = 32;//文件名长度不能超过32字节
 #endif
 //    printf("Power On\r\n");
 //    printf("数字【%d】表示为【%d】\r\n",1000,pdMS_TO_TICKS(1000));
@@ -260,6 +262,9 @@ void com_task(void *pvParameters)
     //FRESULT fres;
     u32 total,free;
     
+    
+    u8 l[LEVEL];
+    DIR dir_a[LEVEL]; //目录缓冲
     while(1) {
         if(Com_Queue!=NULL) {
             memset(buffer,0,COM_REC_LEN);    //清除缓冲区
@@ -301,44 +306,37 @@ void com_task(void *pvParameters)
                                     //?? 参考u8 mf_scan_files(u8 * path) 
                                     //??fileinfo.fattrib=AM_DIR AM_ARC
                                     
-                                    printf("当前目录:\r\n%s->\r\n", curDir);
-                                    fres =f_opendir(&dir, (const TCHAR*)curDir);//??文件，目录都会列出来吗?
-                                    if (fres == FR_OK) {
-                                        for (;;) {
-                                            fres = f_readdir(&dir, &fileinfo);                   //读取目录下的一个文件
-                                            if (fres != FR_OK || fileinfo.fname[0] == 0) {        //错误了/到末尾了,退出
-                                                //printf("错误或到末尾了,退出\r\n");
-                                                break;
-                                            }
-                                            sprintf((char *)tbuf,"%s/%s",curDir,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);
-                                            
-                                            if (fileinfo.fattrib & AM_DIR) {//是目录
-                                                printf("%s [1D]\r\n", tbuf);//打印目录
-                                                fres =f_opendir(&dir1, (const TCHAR*)tbuf);//??文件，目录都会列出来吗?
-                                                if (fres == FR_OK) {
-                                                    j = strlen((char *)tbuf);
-                                                    for (;;) {
-                                                        fres = f_readdir(&dir1, &fileinfo1);                   //读取目录下的一个文件
-                                                        if (fres != FR_OK || fileinfo1.fname[0] == 0) {        //错误了/到末尾了,退出
-                                                            //printf("错误或到末尾了,退出\r\n");
-                                                            break;
-                                                        }
-                                                        sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo1.lfname ? fileinfo1.lfname : fileinfo1.fname);
-                                                        //printf("%s\r\n", tbuf);//打印文件
-                                                        if (fileinfo1.fattrib & AM_DIR) {//是目录
-                                                            printf("%s [2D]\r\n", tbuf);//打印目录
-                                                        }else {
-                                                            printf("%s [2F]\r\n", tbuf);//打印文件
-                                                        }
-                                                        tbuf[j] = 0;
-                                                    }
+
+                                    strcpy((char *)tbuf, (const char *)curDir);
+                                    
+                                    m = 0;
+                                    j = 1;
+                                    printf("当前目录:\r\n%s->\r\n", tbuf);
+                                    while(1) {
+                                        if ( j > m ) {
+                                            f_opendir(&dir_a[j-1], (TCHAR*)tbuf);
+                                            l[j-1] = strlen((char *)tbuf);
+                                        }
+                                        m = j;
+                                        {
+                                            f_readdir(&dir_a[j-1], &fileinfo);                 //读取目录下的一个文件
+                                            if (fileinfo.fname[0] == 0) {                      //到末尾了,退出 //错误了/fres != FR_OK || 
+                                                if (j>1) j--;
+                                                else break;
+                                                tbuf[l[j-1]] = 0;
+                                            }else{
+                                                sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);
+                                                if (fileinfo.fattrib & AM_DIR) {               //是目录
+                                                    printf("%s [%dD]\r\n", tbuf,j);          //打印目录
+                                                    if (j<8) j++;
+                                                }else {
+                                                    printf("%s [%dF]\r\n", tbuf,j);          //打印文件
+                                                    tbuf[l[j-1]] = 0;
                                                 }
-                                            } else {
-                                                printf("%s [1F]\r\n", tbuf);//打印文件
                                             }
                                         }
                                     }
-                                    //scan_files ("0:");
+
                                 } else if (c[i][1] == 2) {//F0,F1,F2,F3,F4
                                     if (buffer[c[i][0]+1]=='0'){//读
                                         if(curFileFlag==0) {
@@ -448,12 +446,12 @@ void com_task(void *pvParameters)
                                         }
                                     } else if(buffer[c[i][0]+1]=='3'){//设置当前文件夹 [F3,0:/CRP]
                                         if(curFileFlag==0) {
-                                            if(c[i][1]-3 < 32) {//长度小于32
+                                            if(c[i][1]-3 < 64) {//长度小于64
                                                 memcpy(curDir, buffer+c[i][0]+3, c[i][1]-3);
                                                 curDir[c[i][1]-3]='\0';//??最后一位不能漏掉
-                                            } else {//长度大于等于12，后面丢弃
-                                                memcpy(curDir, buffer+c[i][0]+3, 31);
-                                                curDir[31]='\0';//
+                                            } else {//长度大于等于63，后面丢弃
+                                                memcpy(curDir, buffer+c[i][0]+3, 63);
+                                                curDir[63]='\0';//
                                             }
 
                                             if(strlen((const TCHAR *)curDir)<=3) {

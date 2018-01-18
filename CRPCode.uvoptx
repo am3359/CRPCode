@@ -205,9 +205,9 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>344</LineNumber>
+          <LineNumber>398</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134222018</Address>
+          <Address>134222718</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -216,7 +216,7 @@
           <BreakIfRCount>1</BreakIfRCount>
           <Filename>.\USER\main.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\CRPCode\USER/main.c\344</Expression>
+          <Expression>\\CRPCode\USER/main.c\398</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow2>
@@ -233,12 +233,27 @@
         <Ww>
           <count>2</count>
           <WinNumber>2</WinNumber>
-          <ItemText>fileinfo1</ItemText>
+          <ItemText>curDir</ItemText>
         </Ww>
         <Ww>
           <count>3</count>
           <WinNumber>2</WinNumber>
-          <ItemText>curDir</ItemText>
+          <ItemText>m</ItemText>
+        </Ww>
+        <Ww>
+          <count>4</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>j</ItemText>
+        </Ww>
+        <Ww>
+          <count>5</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>l</ItemText>
+        </Ww>
+        <Ww>
+          <count>6</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>buffer</ItemText>
         </Ww>
       </WatchWindow2>
       <MemoryWindow1>
