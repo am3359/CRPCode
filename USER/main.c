@@ -2,8 +2,8 @@
 #include "delay.h"
 #include "usart.h"
 #include "spi.h"
-//#include "timer.h"
-//#include "ad7799.h"
+#include "timer.h"
+#include "ad7799.h"
 #include "HC595.h"
 #include "stepmoto.h"
 #include "w25qxx.h"
@@ -105,19 +105,23 @@ void start_task(void *pvParameters);
 #define STEP_Q_NUM     8    //发送步进电机控制命令的消息队列的数量 
 #define PUMP_Q_NUM     8    //发送泵控制命令的消息队列的数量 
 
+//LED端口定义
+#define LED0 PCout(6)	// DS0
+#define LED1 PCout(7)	// DS1	
+
 QueueHandle_t Com_Queue;    //串口消息队列句柄
 QueueHandle_t Hmi_Queue;    //HMI消息队列句柄
 QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
 QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
 QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
 
-#define LEVEL          8    //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
-
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
 u8 getDir(u8 * buf1,u8 * buf2,u8 pos);
 FRESULT scan_files (char* path);
+void LED_Init(void);
+
 u32 GetPWMCnt;
 FATFS fs;
 FIL file;                        //文件1
@@ -126,15 +130,19 @@ UINT br,bw;                      //读写变量
 FILINFO fileinfo;                //文件信息
 DIR dir;                         //目录
 
-u8 filename[32];//64??
+#define LEVEL     8         //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
+#define WORKPATH  "0:/TEST" //默认创建的工作目录0:/CRP
+#define WORKFILE  "setting" //默认当前的文件
+#define NAMELEN   32        //文件名最长为32字节
+
+u8 filename[NAMELEN];//64??
 FRESULT fres;
-u8 curDir[64]="0:/TEST";//??
-u8 curFilename[32]="0001";//??
+u8 curDir[64]=WORKPATH;//??
+u8 curFilename[NAMELEN]=WORKFILE;//??
 u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
 //------------------MAIN 开始------------------
 int main(void)
 {
-    //FRESULT fres;
     //所有硬件初始化
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);//设置系统中断优先级分组4，表示支持0-15级抢占优先级，不支持子优先级。
     
@@ -142,7 +150,8 @@ int main(void)
     UART1_Init(115200);    //串口初始化波特率为115200
     USART3_Init(9600);//115200
     
-//  TIM3_Init();
+    TIM3_PWM_Init();//产生LED脉冲信号1120Hz
+    AD7799_Init(ADC_CON_GAIN1);
     
     HC595Init();//??检查时序是否可靠，变化时是否进入临界区
     StepMotoInit();//??检查时序是否可靠，变化时是否进入临界区
@@ -150,7 +159,7 @@ int main(void)
     W25QXX_Init();//??检查失败需要返回一个标志，在开机自检时显示出来  if(W25QXX_Init() != W25Q128) error
     
     My_RTC_Init();//设置RTC
-    delay_us(2000000);
+    delay_us(2000000);//??为了仿真时延时，正式时删除
     fres=f_mount(&fs,"0:",1);                 //立即挂载FLASH.
     if(fres == FR_NO_FILESYSTEM) {            //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
         //??在HMI里设置可以清除所有记录的功能，直接格式化flash
@@ -166,19 +175,10 @@ int main(void)
     if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
     else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
     else printf("创建文件夹%s失败\r\n",curDir);         //创建文件夹失败
-  //printf("DIR大小:%d",sizeof(DIR)*LEVEL);
-#if _USE_LFN  //1
+    //printf("DIR大小:%d",sizeof(DIR)*LEVEL);
+
     fileinfo.lfname = (TCHAR *)filename;
-    fileinfo.lfsize = 32;//文件名长度不能超过32字节
-//    fileinfo1.lfname = (TCHAR *)filename1;
-//    fileinfo1.lfsize = 32;//文件名长度不能超过32字节
-#endif
-//    printf("Power On\r\n");
-//    printf("数字【%d】表示为【%d】\r\n",1000,pdMS_TO_TICKS(1000));
-//  TIM_Cmd(TIM3, DISABLE);
-//  GetPWMCnt  = TIM_GetCounter(TIM3);
-//  TIM_SetCounter(TIM3, 0); 
-//  TIM_Cmd(TIM3, ENABLE);
+    fileinfo.lfsize = NAMELEN;//文件名长度不能超过32字节
 
     //创建开始任务
     xTaskCreate((TaskFunction_t )start_task,            //任务函数
@@ -305,32 +305,31 @@ void com_task(void *pvParameters)
                                     //http://www.openedv.com/posts/list/7572.htm
                                     //?? 参考u8 mf_scan_files(u8 * path) 
                                     //??fileinfo.fattrib=AM_DIR AM_ARC
-                                    
 
                                     strcpy((char *)tbuf, (const char *)curDir);
                                     
                                     m = 0;
                                     j = 1;
                                     printf("当前目录:\r\n%s->\r\n", tbuf);
-                                    while(1) {                                                 //只有向下一层文件夹搜索时才打开执行
-                                        if ( j > m ) {
+                                    while(1) {
+                                        if ( j > m ) {                                         //只有搜索子目录时才执行
                                             f_opendir(&dir_a[j-1], (TCHAR *)tbuf);
                                             l[j-1] = strlen((char *)tbuf);
                                         }
                                         m = j;
                                         f_readdir(&dir_a[j-1], &fileinfo);                     //读取目录下的一个文件
                                         if (fileinfo.fname[0] == 0) {                          //到末尾了,退出 //错误了/fres != FR_OK || 
-                                            if (j>1) j--;
+                                            if (j>1) j--;                                      //下个循环进入父目录
                                             else break;
-                                            tbuf[l[j-1]] = '\0';
+                                            tbuf[l[j-1]] = '\0';                               //存储的路径返回上级目录
                                         }else{
                                             sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//搜索到的文件或文件名连接成完整的路径
                                             if (fileinfo.fattrib & AM_DIR) {                   //是目录
                                                 printf("%s [%dD]\r\n", tbuf,j);                //打印目录
-                                                if (j<8) j++;
+                                                if (j<8) j++;                                  //下个循环进入子目录
                                             }else {
                                                 printf("%s [%dF]\r\n", tbuf,j);                //打印文件
-                                                tbuf[l[j-1]] = '\0';
+                                                tbuf[l[j-1]] = '\0';                           //存储的路径返回目录
                                             }
                                         }
                                     }
@@ -383,8 +382,8 @@ void com_task(void *pvParameters)
                                         } else printf("格式化失败...\r\n");    //格式化失败
                                         vTaskDelay(pdMS_TO_TICKS(1000));
                                         
-                                        strcpy((char *)curDir,"0:/TEST");
-                                        strcpy((char *)curFilename,"0001");
+                                        strcpy((char *)curDir,WORKPATH);
+                                        strcpy((char *)curFilename,WORKFILE);
                                         curFileFlag=0;
                                         fres=f_mkdir((const TCHAR *)curDir);        //创建文件夹//??已经存在会不会冲突
                                         if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
@@ -700,7 +699,9 @@ void hmi_task(void *pvParameters)
                             else
                                 RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                             RTC_Set_Date(year,month,date,week);    //设置日期
-                        }//否则显示读取时间失败
+                        } else {//否则显示读取时间失败
+                            printf("\r\n没有读到时间\r\n");
+                        }
                         NextState = HMI_CHECK;
                     }
                     vTaskDelay(pdMS_TO_TICKS(20));//至少保证20 的HMI反馈时间
@@ -1035,15 +1036,25 @@ void step_task(void *pvParameters)
     }
 }
 
-
+//u32 ad[16];
 void crp_task(void *pvParameters)
 {
+    u32 ad;
 //    u8 year,month,date,week;
 //    u8 hour,min,sec,ampm;
 //    u32 PreviousState = CRP_START;
 //    u32 CurrentState  = CRP_START;
 //    u32 NextState     = CRP_START;
+    AD7799_Init(ADC_CON_GAIN1);
+    AD7799_Start(ADC_CON_CH1,ADC_CON_GAIN1,ADC_MODE_CONTINUOUS,0x01); 		
+    vTaskDelay(5000);
     while(1) {
+
+            vTaskDelay(500);
+            AD7799_WaitBusy();
+            ad=AD7799_Read();
+            printf("%d\t%.6f\r\n",ad,(double)ad*2.495/16777216);
+
 //        vTaskDelay(5000);
 //        RTC_Get_Time(&hour,&min,&sec,&ampm);//得到时间            
 //        RTC_Get_Date(&year,&month,&date,&week);
@@ -1238,39 +1249,39 @@ u8 str_len(u8 *str)
 }
 
 u8 getDir(u8 * buf1,u8 * buf2,u8 num)
-{
+{//字符串第一个字符不能是'/'，应该以"0:/"形式开头
     u8 i,j,k,l,m;
-    l=strlen((const char *)buf1);
-    i=0;
-    j=0;
-    k=0;
-    while(i<l){//i数量小于长度l
+    l = strlen((const char *)buf1);
+    if (l > 64) l = 64;//限制长度避免溢出
+    i = 0;//指向buf1中的位置
+    j = 0;//指向buf2中的位置，是有效字符串的长度
+    k = 0;//记录目录层数
+    while(i < l){//取出buf1中每一个字符进行判断，i数量小于长度l，
         //"0://test//20180101///"
-        if (*(buf1+i) == '/') {
-            m=0;
-            while(*(buf1+i+m+1) == '/') m++;
-            i+=m;
+        if (*(buf1 + i) == '/') {
+            m = 0;//计数斜杠个数
+            while(*(buf1 + i + m + 1) == '/') m++;
+            i += m;
             k++;
             if(k >= (num+1)){
                 break;
             } else {
-                *(buf2+j)='/';
+                *(buf2 + j) = '/';
                 j++;
             }
-        }
-        else {
-            *(buf2+j)=*(buf1+i);
+        } else {
+            *(buf2 + j) = *(buf1 + i);
             j++;
         }
         i++;
     }
     
-    *(buf2+j)='\0';
+    *(buf2 + j) = '\0';
     
-    if (i == (l-1)){
+    if (i == (l - 1)){
         if (*(buf1+i) == '/') return 0;
     }
-    else if (i<l) return 1;
+    else if (i < l) return 1;
     
     return 0;
 }
@@ -1300,40 +1311,21 @@ u8 exf_getfree(u8 *drv,u32 *total,u32 *free)
     return res;
 }
 
-//FRESULT scan_files (char* path)
-//{
-//    FRESULT res;
-//    u32 i[8],j;//最多找8层
-//    char fn[64],tmppath[64];
-//    strcpy((char *)tmppath,(char *)path);
-//    for(j=0;j<8;j++) {
-//        res = f_opendir(&dir, (TCHAR*)tmppath);
-//        if (res == FR_OK) {
-//            i[j] = strlen(tmppath);
-//            {
-//                res = f_readdir(&dir, &fileinfo);
-//                if (res != FR_OK || fileinfo.fname[0] == 0) break;
-//                if (fileinfo.fname[0] == '.') continue;
-//#if _USE_LFN
-//                strcpy((char *)fn,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//strcat((char *)fn, fileinfo.lfname);
-//#else          
-//                strcpy((char *)fn,fileinfo.fname);//strcat((char *)fn, fileinfo.fname);//短文件名：TT2018~1.TXT
-//#endif
-//                if (fileinfo.fattrib & AM_DIR) {//是目录
-//                    strcat(tmppath,"/");
-//                    strcat(tmppath,fn);
-//                    //sprintf(&tmppath[i], "/%s", fn);
-//                    printf("%s\n", tmppath);
-//                    res = scan_files(tmppath);
-//                    if (res != FR_OK) break;
-//                    tmppath[i[j]] = 0;
+//void LED_Init(void)
+//{    	 
+//    GPIO_InitTypeDef  GPIO_InitStructure;
 
-//                } else {
-//                    printf("%s/%s\n", tmppath, fn);
-//                }
-//            }
-//        }
-//    }
+//    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);//使能GPIOC时钟
 
-//   return res;
+//    //GPIOC6,F7初始化设置
+//    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;//LED0和LED1对应IO口
+//    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//普通输出模式
+//    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
+//    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
+//    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
+//    GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化GPIOC
+//	
+//	GPIO_SetBits(GPIOC,GPIO_Pin_6 | GPIO_Pin_7);//GPIOC6,F7设置高
+
 //}
+

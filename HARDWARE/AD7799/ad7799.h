@@ -40,8 +40,8 @@
 #define UNIPOLAR 0x10
 #define BIPOLAR  0x00
 
-#define AD7799CS PAout(4)
-#define ADC_RDY_DAT PAin(6)
+#define AD7799CS PGout(2)
+#define ADC_RDY_DAT PBin(14)
 
 void AD7799_WriteReg(u8 RegAddr,u8 *Buffer,u8 Length);
 u8 AD7799_WaitBusy(void);

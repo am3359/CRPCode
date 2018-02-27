@@ -11,7 +11,7 @@
 void ADC_WriteBytes(u8 *Cmd,u8 Length)
 {
 	u8 i;
-	for(i=0;i<Length;i++) SPI1_ReadWriteByte(*(Cmd+i));
+	for(i=0;i<Length;i++) SPI2_ReadWriteByte(*(Cmd+i));
 }
 
 /*--------------------------------------------------------- 
@@ -23,37 +23,37 @@ void ADC_WriteBytes(u8 *Cmd,u8 Length)
 void ADC_ReadBytes(u8 *Buffer,u8 Length)
 {
 	u8 i;
-	for(i=0;i<Length;i++) *(Buffer+i)=SPI1_ReadWriteByte(0x00);
+	for(i=0;i<Length;i++) *(Buffer+i)=SPI2_ReadWriteByte(0x00);
 }
 
 void RDY_ON(void)
 {	 
 	GPIO_InitTypeDef  GPIO_InitStructure;
  
-	//RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE);//使能GPIOA时钟
+	//RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB,ENABLE);//使能GPIOB时钟
  
-	//PA6设置
-	GPIO_InitStructure.GPIO_Pin =GPIO_Pin_6;
+	//PB14设置
+	GPIO_InitStructure.GPIO_Pin =GPIO_Pin_14;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;//复用功能
 	//GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
 	GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;//上拉  
-	GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化
+	GPIO_Init(GPIOB, &GPIO_InitStructure);//初始化
 }
 
 void RDY_OFF(void)
 {	 
 	GPIO_InitTypeDef  GPIO_InitStructure;
  
-	//RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE);//使能GPIOA时钟
+	//RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB,ENABLE);//使能GPIOB时钟
  
-	//PA6设置
-	GPIO_InitStructure.GPIO_Pin =GPIO_Pin_6;
+	//PB14设置
+	GPIO_InitStructure.GPIO_Pin =GPIO_Pin_14;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;//复用功能
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
 	GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;//上拉  
-	GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化
+	GPIO_Init(GPIOB, &GPIO_InitStructure);//初始化
 }
 
 /*--------------------------------------------------------- 
@@ -158,14 +158,14 @@ void AD7799CS_Init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStructure;
 	
-	//PA4手动输出
-	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE);
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+	//PG2手动输出
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOG,ENABLE);
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//输出
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
-	GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化
+	GPIO_Init(GPIOG, &GPIO_InitStructure);//初始化
 }
 
 /*--------------------------------------------------------- 
@@ -179,7 +179,7 @@ u8 AD7799_Init(u8 Gain)
 	u8 Cmd[2],ID;
 	AD7799CS_Init();
 	AD7799CS=1;                                     //片选信号置高
-	SPI1_Init();                                    //SPI口初始化
+	SPI2_Init();                                    //SPI口初始化
 	AD7799_Reset();                                 //复位
 	delay_ms(10);                                   //延时
 	AD7799_ReadReg(ADC_REG_ID,&ID,1);               //读取器件ID  

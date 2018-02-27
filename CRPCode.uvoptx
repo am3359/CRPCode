@@ -205,9 +205,25 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>398</LineNumber>
+          <LineNumber>187</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134222718</Address>
+          <Address>134240304</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>.\HARDWARE\AD7799\AD7799.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
+        </Bp>
+        <Bp>
+          <Number>1</Number>
+          <Type>0</Type>
+          <LineNumber>1054</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>134218564</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -216,7 +232,23 @@
           <BreakIfRCount>1</BreakIfRCount>
           <Filename>.\USER\main.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\CRPCode\USER/main.c\398</Expression>
+          <Expression>\\CRPCode\USER/main.c\1054</Expression>
+        </Bp>
+        <Bp>
+          <Number>2</Number>
+          <Type>0</Type>
+          <LineNumber>1057</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>0</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>.\USER\main.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow2>
@@ -254,6 +286,11 @@
           <count>6</count>
           <WinNumber>2</WinNumber>
           <ItemText>buffer</ItemText>
+        </Ww>
+        <Ww>
+          <count>7</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>buf2</ItemText>
         </Ww>
       </WatchWindow2>
       <MemoryWindow1>
@@ -606,7 +643,7 @@
       <GroupNumber>5</GroupNumber>
       <FileNumber>21</FileNumber>
       <FileType>1</FileType>
-      <tvExp>0</tvExp>
+      <tvExp>1</tvExp>
       <Focus>0</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
