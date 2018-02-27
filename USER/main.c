@@ -124,21 +124,20 @@ void LED_Init(void);
 
 u32 GetPWMCnt;
 FATFS fs;
-FIL file;                        //文件1
-//FIL ftemp;                       //文件2.
-UINT br,bw;                      //读写变量
-FILINFO fileinfo;                //文件信息
-DIR dir;                         //目录
+FIL file;                                          //文件
+UINT br,bw;                                        //读写变量
+FILINFO fileinfo;                                  //文件信息
+DIR dir;                                           //目录
 
-#define LEVEL     8         //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
-#define WORKPATH  "0:/TEST" //默认创建的工作目录0:/CRP
-#define WORKFILE  "setting" //默认当前的文件
-#define NAMELEN   32        //文件名最长为32字节
+#define LEVEL             8                        //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
+#define WORKPATH          "0:/TEST"                //默认创建的工作目录0:/CRP
+#define WORKFILE          "setting"                //默认当前的文件
+#define MAXNAMELEN        32                       //文件名最长为32字节
 
-u8 filename[NAMELEN];//64??
+u8 filename[MAXNAMELEN];//64??
 FRESULT fres;
 u8 curDir[64]=WORKPATH;//??
-u8 curFilename[NAMELEN]=WORKFILE;//??
+u8 curFilename[MAXNAMELEN]=WORKFILE;//??
 u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
 //------------------MAIN 开始------------------
 int main(void)
@@ -146,46 +145,44 @@ int main(void)
     //所有硬件初始化
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);//设置系统中断优先级分组4，表示支持0-15级抢占优先级，不支持子优先级。
     
-    delay_init(168);  //初始化延时函数
-    UART1_Init(115200);    //串口初始化波特率为115200
-    USART3_Init(9600);//115200
+    delay_init(168);                               //初始化延时函数
+    UART1_Init(115200);                            //串口1初始化波特率为115200
+    USART3_Init(115200);                           //串口3初始化波特率为115200//9600
     
-    TIM3_PWM_Init();//产生LED脉冲信号1120Hz
-    AD7799_Init(ADC_CON_GAIN1);
+    TIM3_PWM_Init();                               //产生LED脉冲信号1120Hz
+    AD7799_Init(ADC_CON_GAIN1);                    //初始化AD7799,包含SPI2初始化//??频率选择，时序等..
     
-    HC595Init();//??检查时序是否可靠，变化时是否进入临界区
-    StepMotoInit();//??检查时序是否可靠，变化时是否进入临界区
+    HC595Init();                                   //??检查时序是否可靠，变化时是否进入临界区
+    StepMotoInit();                                //??检查时序是否可靠，变化时是否进入临界区
 
-    W25QXX_Init();//??检查失败需要返回一个标志，在开机自检时显示出来  if(W25QXX_Init() != W25Q128) error
+    W25QXX_Init();                                 //??检查失败需要返回一个标志，在开机自检时显示出来  if(W25QXX_Init() != W25Q128) error
     
-    My_RTC_Init();//设置RTC
-    delay_us(2000000);//??为了仿真时延时，正式时删除
-    fres=f_mount(&fs,"0:",1);                 //立即挂载FLASH.
-    if(fres == FR_NO_FILESYSTEM) {            //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
-        //??在HMI里设置可以清除所有记录的功能，直接格式化flash
-        printf("建立文件系统...\r\n");        //格式化FLASH
-        fres=f_mkfs("0:",1,4096);             //格式化FLASH,1,盘符0,不需要引导区,8个扇区为1个簇
+    My_RTC_Init();                                 //设置RTC
+    delay_us(2000000);                             //??为了仿真时延时，正式时删除
+    fres=f_mount(&fs,"0:",1);                      //立即挂载FLASH.
+    if(fres == FR_NO_FILESYSTEM) {                 //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
+        printf("建立文件系统...\r\n");              //格式化FLASH
+        fres=f_mkfs("0:",1,4096);                  //格式化FLASH,1,盘符0,不需要引导区,8个扇区为1个簇
         if(fres == FR_OK) {
             //f_setlabel((const TCHAR *)"0:CRP");    //设置Flash磁盘的名字为：CRP
-            printf("格式化完成\r\n");         //格式化完成
-        } else printf("格式化失败...\r\n");    //格式化失败
+            printf("格式化完成\r\n");               //格式化完成
+        } else printf("格式化失败...\r\n");         //格式化失败
         delay_us(1000000);
     }
-    fres=f_mkdir((const TCHAR *)curDir);        //创建文件夹//??已经存在会不会冲突
-    if(fres == FR_OK) printf("创建了文件夹%s\r\n",curDir);         //创建文件夹完成
+    fres=f_mkdir((const TCHAR *)curDir);           //创建文件夹//??已经存在会不会冲突
+    if(fres == FR_OK) printf("新建目录%s\r\n",curDir);//创建文件夹完成
     else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
-    else printf("创建文件夹%s失败\r\n",curDir);         //创建文件夹失败
-    //printf("DIR大小:%d",sizeof(DIR)*LEVEL);
+    else printf("创建目录%s失败\r\n",curDir);       //创建文件夹失败
 
-    fileinfo.lfname = (TCHAR *)filename;
-    fileinfo.lfsize = NAMELEN;//文件名长度不能超过32字节
+    fileinfo.lfname = (TCHAR *)filename;           //为长文件名分配空间
+    fileinfo.lfsize = MAXNAMELEN;                  //文件名长度不能超过32字节
 
     //创建开始任务
-    xTaskCreate((TaskFunction_t )start_task,            //任务函数
-                (const char*    )"start_task",          //任务名称
-                (uint16_t       )START_STK_SIZE,        //任务堆栈大小
-                (void*          )NULL,                  //传递给任务函数的参数
-                (UBaseType_t    )START_TASK_PRIO,       //任务优先级
+    xTaskCreate((TaskFunction_t )start_task,             //任务函数
+                (const char*    )"start_task",           //任务名称
+                (uint16_t       )START_STK_SIZE,         //任务堆栈大小
+                (void*          )NULL,                   //传递给任务函数的参数
+                (UBaseType_t    )START_TASK_PRIO,        //任务优先级
                 (TaskHandle_t*  )&Start_Task_Handler);   //任务句柄
     vTaskStartScheduler();    
 }
@@ -193,14 +190,14 @@ int main(void)
 //开始任务任务函数
 void start_task(void *pvParameters)
 {
-    taskENTER_CRITICAL();           //进入临界区
+    taskENTER_CRITICAL();                          //进入临界区
     
     //创建消息队列
     Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue
     Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue
     
     Valve_Queue=xQueueCreate(VALVE_Q_NUM,CMD_LEN); //创建消息Valve_Queue
-    Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
+    Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN);   //创建消息Valve_Queue
     //Pump_Queue=xQueueCreate(PUMP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
 
     //创建com_task任务
@@ -239,32 +236,31 @@ void start_task(void *pvParameters)
                 (UBaseType_t    )CRP_TASK_PRIO,
                 (TaskHandle_t*  )&CRP_Task_Handler);
                 
-    vTaskDelete(Start_Task_Handler); //删除开始任务
-    taskEXIT_CRITICAL();            //退出临界区
+    vTaskDelete(Start_Task_Handler);               //删除开始任务
+    taskEXIT_CRITICAL();                           //退出临界区
 }
 //u8 x;
 //com_task任务函数
 void com_task(void *pvParameters)
 {//uart1通讯
-    u8 tbuf[64];//??__align(4)  //??注意tbuf的大小要能放得下最深的文件名绝对路径
+    u8 tbuf[64];                                   //??__align(4)  //??注意tbuf的大小要能放得下最深的文件名绝对路径
     u8 year,month,date,week;
     u8 hour,min,sec,ampm;
     
-    u8 buffer[COM_REC_LEN];//??__align(4) 
+    u8 buffer[COM_REC_LEN];                        //??__align(4) 
     BaseType_t err;
-    u8 command[12];//命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
+    u8 command[12];                                //命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
     
-    u8 c[8][2];//存位置和长度
-    u8 num;//存命令个数
-    u8 cmdtype;//命令类型，0无效数据，1非阻塞，2阻塞型
+    u8 c[8][2];                                    //存位置和长度
+    u8 num;                                        //存命令个数
+    u8 cmdtype;                                    //命令类型，0无效数据，1非阻塞，2阻塞型
     
     u8 i,j,m;//,j,valid;
     //FRESULT fres;
     u32 total,free;
     
-    
-    u8 l[LEVEL];        //l[]保存每层文件长度，返回上级目录时用
-    DIR dir_a[LEVEL];   //FATFS使用的目录结构，只有这个比较占内存需要LEVEL*36字节
+    u8 l[LEVEL];                                   //l[]保存每层文件长度，返回上级目录时用
+    DIR dir_a[LEVEL];                              //FATFS使用的目录结构，只有这个比较占内存需要LEVEL*36字节
     while(1) {
         if(Com_Queue!=NULL) {
             memset(buffer,0,COM_REC_LEN);    //清除缓冲区
@@ -573,8 +569,7 @@ void hmi_task(void *pvParameters)
     u8 buffer[HMI_REC_LEN];
     BaseType_t res;
     u8 year,month,date,week;
-    u8 hour,min,sec,time_valid;//,ampm;
-    u32 start_task;
+    u8 hour,min,sec,start_cnt;//time_valid;//,ampm;
     
 //    u8 command[12];
     
@@ -595,7 +590,7 @@ void hmi_task(void *pvParameters)
         switch(CurrentState) {
             case HMI_START:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page start", sizeof("page start")-1);//Uart3_HMICmd("cls RED", sizeof("cls RED")-1);//刷屏
+                    //Uart3_HMICmd("page start", sizeof("page start")-1);//Uart3_HMICmd("cls RED", sizeof("cls RED")-1);//刷屏
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100  //??打印pdMS_TO_TICKS看看是不是实际值
 //                    memcpy(command,"1021", 4);
 //                    command[4]='\0';
@@ -603,115 +598,57 @@ void hmi_task(void *pvParameters)
 //                    memcpy(command,"10140400", 8);
 //                    command[8]='\0';
 //                    xQueueSend(Step_Queue,command,10);//向Valve_Queue队列中发送数据
-                    start_task=0;
-                    time_valid=0;
+                    start_cnt=0;
+                    //time_valid=0;
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     //需要完成：从HMI读取当前时间赋值给RTC，步进电机运动，光电信号（光隔和红光）测试，阀，泵等检测
                     //1：从HMI读取当前时间赋值给RTC
-                    if(start_task == 0){
-                        Uart3_HMICmd("get rtc0", sizeof("get rtc0")-1);
-                        start_task++;
-                    } else if(start_task < 10){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            if((buffer[1]+buffer[2]*256)>=2000) year=(buffer[1]+buffer[2]*256)-2000;
-                            else year = 0;
-                            time_valid |= (1<<0);
-                            start_task=10;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 10){
-                        Uart3_HMICmd("get rtc1", sizeof("get rtc1")-1);
-                        start_task++;
-                    } else if(start_task < 20){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            month=buffer[1];
-                            time_valid |= (1<<1);
-                            start_task=20;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 20){
-                        Uart3_HMICmd("get rtc2", sizeof("get rtc2")-1);
-                        start_task++;
-                    } else if(start_task < 30){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            date=buffer[1];
-                            time_valid |= (1<<2);
-                            start_task=30;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 30){
-                        Uart3_HMICmd("get rtc3", sizeof("get rtc3")-1);
-                        start_task++;
-                    } else if(start_task < 40){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            hour=buffer[1];
-                            time_valid |= (1<<3);
-                            start_task=40;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 40){
-                        Uart3_HMICmd("get rtc4", sizeof("get rtc4")-1);
-                        start_task++;
-                    } else if(start_task < 50){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            min=buffer[1];
-                            time_valid |= (1<<4);
-                            start_task=50;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 50){
-                        Uart3_HMICmd("get rtc5", sizeof("get rtc5")-1);
-                        start_task++;
-                    } else if(start_task < 60){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            sec=buffer[1];
-                            time_valid |= (1<<5);
-                            start_task=60;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else if(start_task == 60){
-                        Uart3_HMICmd("get rtc6", sizeof("get rtc6")-1);
-                        start_task++;
-                    } else if(start_task < 70){
-                        if((res == pdTRUE) && (buffer[0] == 0x71)){//收到有效数据
-                            week=buffer[1];//??星期日是7还是0
-                            time_valid |= (1<<6);
-                            start_task=70;
-                        } else {//无数据
-                            start_task++;
-                        }
-                    } else {
-                        if(time_valid == 0x7F){//??需要判断time_valid为127才能表示时间数据有效
+                    if(start_cnt == 0){
+                        //Uart3_HMICmd("get rtc0", sizeof("get rtc0")-1);
+                        Uart3_PutString("\x5A\xA5\x03\x81\x20\x07", 6);//5A A5 03 81 20 07 读取RTC
+                        start_cnt++;
+                    } else if(start_cnt < 10){
+                        if((res == pdTRUE) && (buffer[1] == 0x20)){//收到有效数据
+                            
+                            year  = ((buffer[3] >> 4 ) & 0x0f)* 10 + (buffer[3] & 0x0f);
+                            month = ((buffer[4] >> 4 ) & 0x0f)* 10 + (buffer[4] & 0x0f);
+                            date  = ((buffer[5] >> 4 ) & 0x0f)* 10 + (buffer[5] & 0x0f);
+                            week  =                                  (buffer[6] & 0x0f);
+                            hour  = ((buffer[7] >> 4 ) & 0x0f)* 10 + (buffer[7] & 0x0f);
+                            min   = ((buffer[8] >> 4 ) & 0x0f)* 10 + (buffer[8] & 0x0f);
+                            sec   = ((buffer[9] >> 4 ) & 0x0f)* 10 + (buffer[9] & 0x0f);
+
                             //printf("time_valid:%d\r\n",time_valid);
                             printf("\r\n时间有效20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
-                            year=CorrectYear(year);
-                            CorrectDate(year,&month,&date);
-                            CorrectTime(&hour,&min,&sec);
-                            week=RTC_Get_Week(2000 + year,month,date);
+                            //year=CorrectYear(year);
+                            //CorrectDate(year,&month,&date);
+                            //CorrectTime(&hour,&min,&sec);
+                            //week=RTC_Get_Week(2000 + year,month,date);
                             if(hour < 12)//?? 
                                 RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
                             else
                                 RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                             RTC_Set_Date(year,month,date,week);    //设置日期
-                        } else {//否则显示读取时间失败
-                            printf("\r\n没有读到时间\r\n");
+                            //time_valid = 1;
+                            //start_cnt=10;
+                            NextState = HMI_CHECK;
+                        } else {//无数据
+                            start_cnt++;
                         }
+                    } else {
+                        //显示读取时间失败
+                        printf("\r\n没有读到时间\r\n");
+
                         NextState = HMI_CHECK;
                     }
                     vTaskDelay(pdMS_TO_TICKS(20));//至少保证20 的HMI反馈时间
-                    //printf("start_task:%d\r\n",start_task);
+                    //printf("start_cnt:%d\r\n",start_cnt);
                 STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
                     vTaskDelay(pdMS_TO_TICKS(2000));//至少保证10
                 STATE_END                                                       //} break;
             case HMI_CHECK:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page check", sizeof("page check")-1);
+                    //Uart3_HMICmd("page check", sizeof("page check")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     //需要完成：清洗等
@@ -722,7 +659,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_ANALY:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
+                    //Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -747,7 +684,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
+                            //Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
@@ -756,7 +693,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_QUERY:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
+                    //Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -781,7 +718,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
+                            //Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
@@ -790,7 +727,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_QC:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
+                    //Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -815,7 +752,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
+                            //Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
@@ -824,7 +761,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_SET:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
+                    //Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -849,7 +786,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
+                            //Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
@@ -858,7 +795,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_SYS:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
+                    //Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -883,7 +820,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
+                            //Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
@@ -892,7 +829,7 @@ void hmi_task(void *pvParameters)
                 STATE_END                                                       //} break;
            case HMI_OFF:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
+                    //Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
                     vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
                     if(buffer[0]==0x65) {
@@ -917,7 +854,7 @@ void hmi_task(void *pvParameters)
                                     break;
                             }
                         } else {
-                            Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
+                            //Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
                             NextState = HMI_ANALY;
                         }
                     }
