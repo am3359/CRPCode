@@ -7,10 +7,13 @@
 #include "HC595.h"
 #include "stepmoto.h"
 #include "w25qxx.h"
+#include "exti.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 #include "queue.h"
+
 #include "string.h"
 
 #include "ff.h"
@@ -23,6 +26,9 @@
 #define STATE_EXIT_ACTION_EXCLUSIVE       } else if ( NextState != CurrentState ) { CurrentState = NextState;
 #define STATE_END                         } break;
 
+//??堆栈大小需要测试,优先级需要确定
+
+//!数值越大优先级越高
 //任务优先级
 #define COM_TASK_PRIO        10
 //任务堆栈大小    
@@ -42,31 +48,31 @@ TaskHandle_t HMI_Task_Handler;
 void hmi_task(void *pvParameters);
 
 //任务优先级
-#define VALVE_TASK_PRIO      8
+#define MOTION_TASK_PRIO      8
 //任务堆栈大小    
-#define VALVE_STK_SIZE       256  
+#define MOTION_STK_SIZE       256  
 //任务句柄
-TaskHandle_t Valve_Task_Handler;
+TaskHandle_t Motion_Task_Handler;
 //任务函数
-void valve_task(void *pvParameters);
+void motion_task(void *pvParameters);
 
-//任务优先级
-#define STEP_TASK_PRIO      7
-//任务堆栈大小    
-#define STEP_STK_SIZE       256  
-//任务句柄
-TaskHandle_t Step_Task_Handler;
-//任务函数
-void step_task(void *pvParameters);
+////任务优先级
+//#define STEP_TASK_PRIO      7
+////任务堆栈大小    
+//#define STEP_STK_SIZE       256  
+////任务句柄
+//TaskHandle_t Step_Task_Handler;
+////任务函数
+//void step_task(void *pvParameters);
 
-//任务优先级
-#define CRP_TASK_PRIO      6
-//任务堆栈大小    
-#define CRP_STK_SIZE       256  
-//任务句柄
-TaskHandle_t CRP_Task_Handler;
-//任务函数
-void crp_task(void *pvParameters);
+////任务优先级
+//#define CRP_TASK_PRIO      6
+////任务堆栈大小    
+//#define CRP_STK_SIZE       256  
+////任务句柄
+//TaskHandle_t CRP_Task_Handler;
+////任务函数
+//void crp_task(void *pvParameters);
 
 //任务优先级
 #define START_TASK_PRIO        1
@@ -77,6 +83,7 @@ TaskHandle_t Start_Task_Handler;
 //任务函数
 void start_task(void *pvParameters);
 
+//??HMI需要重写，不是以页面为状态，是以收到的命令为状态
 #define HMI_OTHER      0
 #define HMI_START      1
 #define HMI_CHECK      2
@@ -87,45 +94,43 @@ void start_task(void *pvParameters);
 #define HMI_SYS        7
 #define HMI_OFF        8
 
-#define CRP_OTHER      0
-#define CRP_START      1
-#define CRP_CHECK      2
-#define CRP_ANALY      3
-#define CRP_QC         4
-#define CRP_SET        5
-#define CRP_SYS        6
-#define CRP_OFF        7
+#define COM_Q_NUM      4                           //发送数据的消息队列的数量 
+#define HMI_Q_NUM     16                           //发送数据的消息队列的数量 
 
-#define COM_Q_NUM      4    //发送数据的消息队列的数量 
-#define HMI_Q_NUM     16    //发送数据的消息队列的数量 
+#define CMD_LEN       12                           //阀控制命令长度  //命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
 
-#define CMD_LEN       12    //阀控制命令长度  //命令为4字节或8字节还有结束位1字节总长度5或9字节，凑成4的整数倍为12字节
+#define MOTION_Q_NUM  16                           //运动控制命令的消息队列的数量 
 
-#define VALVE_Q_NUM    8    //发送阀控制命令的消息队列的数量 
-#define STEP_Q_NUM     8    //发送步进电机控制命令的消息队列的数量 
-#define PUMP_Q_NUM     8    //发送泵控制命令的消息队列的数量 
+//#define VALVE_Q_NUM   16                           //发送阀控制命令的消息队列的数量 
+//#define STEP_Q_NUM    16                           //发送步进电机控制命令的消息队列的数量 
+//#define PUMP_Q_NUM     8                           //发送泵控制命令的消息队列的数量 
 
-//LED端口定义
-#define LED0 PCout(6)	// DS0
-#define LED1 PCout(7)	// DS1	
+QueueHandle_t Com_Queue;                           //串口消息队列句柄
+QueueHandle_t Hmi_Queue;                           //HMI消息队列句柄
+QueueHandle_t Motion_Queue;                        //运动控制消息队列句柄
+//QueueHandle_t Valve_Queue;                         //阀控制消息队列句柄
+//QueueHandle_t Step_Queue;                          //步进电机控制消息队列句柄
+//QueueHandle_t Pump_Queue;                          //泵控制消息队列句柄   ??蠕动泵当做步进电机用，旋转泵当做阀用
 
-QueueHandle_t Com_Queue;    //串口消息队列句柄
-QueueHandle_t Hmi_Queue;    //HMI消息队列句柄
-QueueHandle_t Valve_Queue;  //阀控制消息队列句柄
-QueueHandle_t Step_Queue;   //步进电机控制消息队列句柄
-QueueHandle_t Pump_Queue;   //泵控制消息队列句柄
+struct motion_state{
+    u8 motion_type;//运动类型：0，无运动；1，非阻塞运动；2，阻塞运动
+    u8 current_motion;//当前运动目标：'A'，复位运动；'S'，步进电机；'V'，阀；'R'，蠕动泵；'P'，旋转泵
+    u16 step_flag;//每一位代表一个步进电机开1或关0，只能一个是1??   蠕动泵归到步进电机中
+    u16 valve_flag;//每一位代表一个阀开1或关0，可以多个1           旋转泵归到阀中
+}motion_state1;//??运动状态变量不锁
+
+//互斥信号量句柄
+SemaphoreHandle_t MutexSemMotion;	//运动控制互斥信号量??只锁运动控制模块
+//??printf应在一个任务中，否则要加互斥信号量
 
 u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
 u8 getDir(u8 * buf1,u8 * buf2,u8 pos);
-FRESULT scan_files (char* path);
-void LED_Init(void);
 
-u32 GetPWMCnt;
 FATFS fs;
 FIL file;                                          //文件
-UINT br,bw;                                        //读写变量
+//UINT br,bw;                                        //读写变量
 FILINFO fileinfo;                                  //文件信息
 DIR dir;                                           //目录
 
@@ -134,7 +139,7 @@ DIR dir;                                           //目录
 #define WORKFILE          "setting"                //默认当前的文件
 #define MAXNAMELEN        32                       //文件名最长为32字节
 
-u8 filename[MAXNAMELEN];//64??
+u8 filename[MAXNAMELEN];//32??
 FRESULT fres;
 u8 curDir[64]=WORKPATH;//??
 u8 curFilename[MAXNAMELEN]=WORKFILE;//??
@@ -142,26 +147,36 @@ u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
 //------------------MAIN 开始------------------
 int main(void)
 {
+
     //所有硬件初始化
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);//设置系统中断优先级分组4，表示支持0-15级抢占优先级，不支持子优先级。
     
     delay_init(168);                               //初始化延时函数
-    UART1_Init(115200);                            //串口1初始化波特率为115200
-    USART3_Init(115200);                           //串口3初始化波特率为115200//9600
     
-    TIM3_PWM_Init();                               //产生LED脉冲信号1120Hz
+    EXTIX_Init();
+    
+    UART1_Init(115200);                            //串口1初始化波特率为115200，用于串口通讯
+    USART3_Init(115200);                           //串口3初始化波特率为115200，用于HMI 通讯
+    
+    //TIM3_PWM_Init();                               //产生LED脉冲信号1120Hz
+    TIM2_PWM_Init();                               //产生LED脉冲信号1120Hz PB11
     AD7799_Init(ADC_CON_GAIN1);                    //初始化AD7799,包含SPI2初始化//??频率选择，时序等..
     
     HC595Init();                                   //??检查时序是否可靠，变化时是否进入临界区
     StepMotoInit();                                //??检查时序是否可靠，变化时是否进入临界区
+//StepMotoCal(1100,392,50);
+//StepMotoCal(2000,1000,50);
 
     W25QXX_Init();                                 //??检查失败需要返回一个标志，在开机自检时显示出来  if(W25QXX_Init() != W25Q128) error
     
     My_RTC_Init();                                 //设置RTC
     delay_us(2000000);                             //??为了仿真时延时，正式时删除
+
+//StepMotoMove(0,0,-600,get_c1());
+
     fres=f_mount(&fs,"0:",1);                      //立即挂载FLASH.
     if(fres == FR_NO_FILESYSTEM) {                 //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
-        printf("建立文件系统...\r\n");              //格式化FLASH
+        printf("建立文件系统...\r\n");             //格式化FLASH
         fres=f_mkfs("0:",1,4096);                  //格式化FLASH,1,盘符0,不需要引导区,8个扇区为1个簇
         if(fres == FR_OK) {
             //f_setlabel((const TCHAR *)"0:CRP");    //设置Flash磁盘的名字为：CRP
@@ -169,7 +184,7 @@ int main(void)
         } else printf("格式化失败...\r\n");         //格式化失败
         delay_us(1000000);
     }
-    fres=f_mkdir((const TCHAR *)curDir);           //创建文件夹//??已经存在会不会冲突
+    fres=f_mkdir((const TCHAR *)curDir);           //创建文件夹
     if(fres == FR_OK) printf("新建目录%s\r\n",curDir);//创建文件夹完成
     else if(fres == FR_EXIST) printf("文件夹%s已经存在\r\n",curDir);
     else printf("创建目录%s失败\r\n",curDir);       //创建文件夹失败
@@ -193,13 +208,17 @@ void start_task(void *pvParameters)
     taskENTER_CRITICAL();                          //进入临界区
     
     //创建消息队列
-    Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue
-    Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue
+    Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue，接收串口命令，命令数4，命令长度63
+    Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue，接收HMI 命令，命令数16，命令长度15
     
-    Valve_Queue=xQueueCreate(VALVE_Q_NUM,CMD_LEN); //创建消息Valve_Queue
-    Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN);   //创建消息Valve_Queue
+    Motion_Queue=xQueueCreate(MOTION_Q_NUM,CMD_LEN);   //创建消息Valve_Queue，接收步进电机命令，命令数16，命令长度12
+    //Valve_Queue=xQueueCreate(VALVE_Q_NUM,CMD_LEN); //创建消息Valve_Queue，接收阀命令，命令数16，命令长度12
+    //Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN);   //创建消息Valve_Queue，接收步进电机命令，命令数16，命令长度12
     //Pump_Queue=xQueueCreate(PUMP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
 
+   	//创建互斥信号量
+	MutexSemMotion=xSemaphoreCreateMutex();
+    
     //创建com_task任务
     xTaskCreate((TaskFunction_t )com_task,
                 (const char*    )"com_task",
@@ -214,33 +233,41 @@ void start_task(void *pvParameters)
                 (void*          )NULL,
                 (UBaseType_t    )HMI_TASK_PRIO,
                 (TaskHandle_t*  )&HMI_Task_Handler);
-    //创建valve_task任务
-    xTaskCreate((TaskFunction_t )valve_task,
-                (const char*    )"valve_task",
-                (uint16_t       )VALVE_STK_SIZE,
+    //创建motion_task任务
+    xTaskCreate((TaskFunction_t )motion_task,
+                (const char*    )"motion_task",
+                (uint16_t       )MOTION_STK_SIZE,
                 (void*          )NULL,
-                (UBaseType_t    )VALVE_TASK_PRIO,
-                (TaskHandle_t*  )&Valve_Task_Handler);
-    //创建step_task任务
-    xTaskCreate((TaskFunction_t )step_task,
-                (const char*    )"step_task",
-                (uint16_t       )STEP_STK_SIZE,
-                (void*          )NULL,
-                (UBaseType_t    )STEP_TASK_PRIO,
-                (TaskHandle_t*  )&Step_Task_Handler);
-    //创建crp_task任务
-    xTaskCreate((TaskFunction_t )crp_task,
-                (const char*    )"crp_task",
-                (uint16_t       )CRP_STK_SIZE,
-                (void*          )NULL,
-                (UBaseType_t    )CRP_TASK_PRIO,
-                (TaskHandle_t*  )&CRP_Task_Handler);
+                (UBaseType_t    )MOTION_TASK_PRIO,
+                (TaskHandle_t*  )&Motion_Task_Handler);
+//    //创建valve_task任务
+//    xTaskCreate((TaskFunction_t )valve_task,
+//                (const char*    )"valve_task",
+//                (uint16_t       )VALVE_STK_SIZE,
+//                (void*          )NULL,
+//                (UBaseType_t    )VALVE_TASK_PRIO,
+//                (TaskHandle_t*  )&Valve_Task_Handler);
+//    //创建step_task任务
+//    xTaskCreate((TaskFunction_t )step_task,
+//                (const char*    )"step_task",
+//                (uint16_t       )STEP_STK_SIZE,
+//                (void*          )NULL,
+//                (UBaseType_t    )STEP_TASK_PRIO,
+//                (TaskHandle_t*  )&Step_Task_Handler);
+//    //创建crp_task任务
+//    xTaskCreate((TaskFunction_t )crp_task,
+//                (const char*    )"crp_task",
+//                (uint16_t       )CRP_STK_SIZE,
+//                (void*          )NULL,
+//                (UBaseType_t    )CRP_TASK_PRIO,
+//                (TaskHandle_t*  )&CRP_Task_Handler);
                 
     vTaskDelete(Start_Task_Handler);               //删除开始任务
     taskEXIT_CRITICAL();                           //退出临界区
 }
-//u8 x;
-//com_task任务函数
+
+u32 sum;
+u16 c0,c1,a;
 void com_task(void *pvParameters)
 {//uart1通讯
     u8 tbuf[64];                                   //??__align(4)  //??注意tbuf的大小要能放得下最深的文件名绝对路径
@@ -256,29 +283,33 @@ void com_task(void *pvParameters)
     u8 cmdtype;                                    //命令类型，0无效数据，1非阻塞，2阻塞型
     
     u8 i,j,m;//,j,valid;
-    //FRESULT fres;
     u32 total,free;
     
     u8 l[LEVEL];                                   //l[]保存每层文件长度，返回上级目录时用
     DIR dir_a[LEVEL];                              //FATFS使用的目录结构，只有这个比较占内存需要LEVEL*36字节
+    
+    
+    u8 bits;
+    //u16 c0,c1,a;
+    s32 steps;
+    
     while(1) {
         if(Com_Queue!=NULL) {
-            memset(buffer,0,COM_REC_LEN);    //清除缓冲区
+            memset(buffer,0,COM_REC_LEN);          //清除缓冲区
 
-            err=xQueueReceive(Com_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+            err=xQueueReceive(Com_Queue,buffer,10);//接收串口命令，采用非阻塞式  portMAX_DELAY
             if(err == pdTRUE) {//串口命令解析
-            //1234[V010;S01cpppp;P01ktttt;R01ctttt;T01b;D0171207;N0143500]
+            //1234[V010;S01cpppp;P01ktttt;R01b;T01b;D0171207;N0143500]
             //(P0130020)
                 cmdtype=decodeCmd(buffer,str_len(buffer),c,&num);//输入字符串，判断出有效命令位置长度和个数，返回类型cmdtype：0无效数据，1非阻塞，2阻塞型
-                if (cmdtype == 1) {//非阻塞命令
+                if (cmdtype == 1) {//非阻塞命令[]，直接处理
                     for(i=0;i<num;i++) {
                         switch(buffer[c[i][0]]) {
                             case 'D':
+                                //??获取时间之前，需要先向HMI获取时间
                                 RTC_Get_Time(&hour,&min,&sec,&ampm);//得到时间    
                                 RTC_Get_Date(&year,&month,&date,&week);
-                                /*if (c[i][1] == 1) {//查询日期
-                                    printf("20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
-                                } else */if (c[i][1] == 8) {//设置日期
+                                if (c[i][1] == 8) {//设置日期
                                     year=(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
                                     month=(buffer[c[i][0]+4]-'0')*10+buffer[c[i][0]+5]-'0';
                                     date=(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
@@ -291,16 +322,16 @@ void com_task(void *pvParameters)
                                     else
                                         RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                                     RTC_Set_Date(year,month,date,week);    //设置日期
+                                    //????还要设置HMI的时间
+                                    
+                                    
                                 }
                                 printf("D20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
                                 break;
                             case 'F':
-                                if (c[i][1] == 1) {//查询磁盘信息、文件列表  ??可以显示整个磁盘的所有文件夹和文件
+                                if (c[i][1] == 1) {//查询磁盘信息、文件列表
                                     exf_getfree((u8*)"0:",&total,&free);
                                     printf("0磁盘总容量：%dKB，剩余：%dKB\r\n", total,free);
-                                    //http://www.openedv.com/posts/list/7572.htm
-                                    //?? 参考u8 mf_scan_files(u8 * path) 
-                                    //??fileinfo.fattrib=AM_DIR AM_ARC
 
                                     strcpy((char *)tbuf, (const char *)curDir);
                                     
@@ -329,7 +360,6 @@ void com_task(void *pvParameters)
                                             }
                                         }
                                     }
-
                                 } else if (c[i][1] == 2) {//F0,F1,F2,F3,F4
                                     if (buffer[c[i][0]+1]=='0'){//读
                                         if(curFileFlag==0) {
@@ -468,12 +498,10 @@ void com_task(void *pvParameters)
                                 }
                                 break;
                             case 'N':
-                                //vTaskDelay(pdMS_TO_TICKS(20));
+                                //??获取时间之前，需要先向HMI获取时间
                                 RTC_Get_Time(&hour,&min,&sec,&ampm);//得到时间    
                                 RTC_Get_Date(&year,&month,&date,&week);
-                                /*if (c[i][1] == 1) {//查询时间
-                                    printf("20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
-                                } else */if (c[i][1] == 8) {//设置时间
+                                if (c[i][1] == 8) {//设置时间
                                     hour=(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
                                     min=(buffer[c[i][0]+4]-'0')*10+buffer[c[i][0]+5]-'0';
                                     sec=(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
@@ -486,6 +514,9 @@ void com_task(void *pvParameters)
                                     else
                                         RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                                     RTC_Set_Date(year,month,date,week);    //设置日期
+                                    //????还要设置HMI的时间
+                                    
+                                    
                                 }
                                 printf("N20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
                                 break;
@@ -495,62 +526,194 @@ void com_task(void *pvParameters)
                                 else if (c[i][1] == 4) {//设置温度
                                 }
                                 break;
+                            case 'M':
+                                //查询状态
+                                printf("运动类型：%d\r\n",motion_state1.motion_type);
+                                if(motion_state1.current_motion >= 'A' && motion_state1.current_motion <= 'Z')
+                                    printf("当前运动目标：%c\r\n",motion_state1.current_motion);
+                                else
+                                    printf("当前没有运动目标\r\n");
+                                printf("步进电机状态：%#x\r\n",motion_state1.step_flag);
+                                printf("阀状态：%#x\r\n",motion_state1.valve_flag);
+                                break;
                             case 'V':
-                                if ((c[i][1] == 1) || (c[i][1] == 4)) {//查询阀状态  //设置阀开关//Vnnb
-                                    memcpy(command,buffer+c[i][0], c[i][1]);
-                                    command[0]='1';
-                                    command[c[i][1]]='\0';
-                                    xQueueSend(Valve_Queue,command,10);//向Valve_Queue队列中发送数据
+                                if (c[i][1] == 4) {//查询阀状态  //设置阀开关//Vnnb
+                                    //在阻塞队列Motion_Queue为空时直接处理??如何避免冲突 处理时不允许向阻塞队列Motion_Queue添加任务
+                                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                                        //运动模块互斥访问
+                                        
+                                        motion_state1.motion_type=1;//非阻塞运动
+                                        motion_state1.current_motion='V';
+                                        
+                                        printf("阀控制命令:%s\r\n",buffer);  //??(buffer[c[i][0]+2]-'0')*10+buffer[c[i][0]+3]-'0';
+                                        //[V011]
+                                        bits=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
+                                        if (bits) {//bits>0相应的阀动作
+                                            if(buffer[c[i][0]+3]=='0')
+                                                motion_state1.valve_flag &= ~(1<<(bits-1));
+                                            else
+                                                motion_state1.valve_flag |= 1<<(bits-1);
+                                        }
+                                        printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+                                        SwitchOut(motion_state1.valve_flag);
+                                        
+                                        motion_state1.motion_type=0;//无运动 
+                                        motion_state1.current_motion=0;//无运动目标
+                                        
+                                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                                    } else printf("com_task[V]没有获得互斥信号量\r\n");
                                 }
                                 break;
                             case 'S':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询步进电机状态  //设置步进电机
-                                    memcpy(command,buffer+c[i][0], c[i][1]);
-                                    command[0]='1';
-                                    command[c[i][1]]='\0';
-                                    xQueueSend(Step_Queue,command,10);//向Step_Queue队列中发送数据
+                                if (c[i][1] == 8) {//查询步进电机状态  //设置步进电机
+                                    //在阻塞队列Motion_Queue为空时直接处理??如何避免冲突 处理时不允许向阻塞队列Motion_Queue添加任务
+                                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                                        //运动模块互斥访问
+                                        
+                                        motion_state1.motion_type=1;//非阻塞运动
+                                        motion_state1.current_motion='S';
+                                        
+                                        printf("步进电机控制命令:%s\r\n",buffer);
+                                        num=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
+                                    
+                                        steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
+                                        if((buffer[c[i][0]+3]-'0') >= 4) steps=-steps;
+
+                                        if(num) {//??当num=5时，就是蠕动泵
+                                            StepMotoMove(num-1,0,steps,2);
+                                        }
+                                        
+                                        motion_state1.motion_type=0;//无运动 
+                                        motion_state1.current_motion=0;//无运动目标
+                                        
+                                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                                    } else printf("com_task[S]没有获得互斥信号量\r\n");
                                 }
                                 break;
                             case 'P':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询蠕动泵状态  //设置蠕动泵
-
+                                if (c[i][1] == 8) {//查询蠕动泵状态  //设置蠕动泵
+                                    //在阻塞队列Motion_Queue为空时直接处理??如何避免冲突 处理时不允许向阻塞队列Motion_Queue添加任务
+                                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                                        //运动模块互斥访问
+                                        
+                                        motion_state1.motion_type=1;//非阻塞运动
+                                        motion_state1.current_motion='P';
+                                        
+                                        printf("蠕动泵控制命令:%s\r\n",buffer);
+                                        num=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
+                                        if(num==1) {
+                                            steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
+                                            if((buffer[c[i][0]+3]-'0') >= 4) steps=-steps;
+                                            StepMotoMove(4,0,steps,2);
+                                        }
+                                        
+                                        motion_state1.motion_type=0;//无运动 
+                                        motion_state1.current_motion=0;//无运动目标
+                                        
+                                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                                    } else printf("com_task[P]没有获得互斥信号量\r\n");
                                 }
                                 break;
                             case 'R':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询旋转泵状态  //设置旋转泵
-                                    
+                                if (c[i][1] == 4) {//查询旋转泵状态  //设置旋转泵
+                                    //在阻塞队列Motion_Queue为空时直接处理??如何避免冲突 处理时不允许向阻塞队列Motion_Queue添加任务
+                                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                                        //运动模块互斥访问
+                                        
+                                        motion_state1.motion_type=1;//非阻塞运动
+                                        motion_state1.current_motion='R';
+                                        
+                                        printf("旋转泵控制命令:%s\r\n",buffer);//??c[i][0]+
+                                        //[R011]
+                                        bits=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
+                                        if (bits==1) {//bits>0相应的阀动作
+                                            if(buffer[c[i][0]+3]=='0')
+                                                motion_state1.valve_flag &= ~(1<<(15-1));
+                                            else
+                                                motion_state1.valve_flag |= 1<<(15-1);
+                                        }
+                                        printf("旋转泵状态:%#x\r\n",motion_state1.valve_flag);
+                                        SwitchOut(motion_state1.valve_flag);
+                                        
+                                        motion_state1.motion_type=0;//无运动 
+                                        motion_state1.current_motion=0;//无运动目标
+                                        
+                                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                                    } else printf("com_task[R]没有获得互斥信号量\r\n");
+                                }
+                                break;
+                            case 'B':
+                                if (c[i][1] == 13) {
+                                    c0=(buffer[c[i][0]+1]-'0')*1000+(buffer[c[i][0]+2]-'0')*100+(buffer[c[i][0]+3]-'0')*10+(buffer[c[i][0]+4]-'0');
+                                    c1=(buffer[c[i][0]+5]-'0')*1000+(buffer[c[i][0]+6]-'0')*100+(buffer[c[i][0]+7]-'0')*10+(buffer[c[i][0]+8]-'0');
+                                    a=(buffer[c[i][0]+9]-'0')*1000+(buffer[c[i][0]+10]-'0')*100+(buffer[c[i][0]+11]-'0')*10+(buffer[c[i][0]+12]-'0');
+                                    printf("c0:%d,c1:%d,a:%d,\r\n", c0,c1,a); 
+                                    sum=StepMotoCal(c0,c1,a);
+
                                 }
                                 break;
                             default:
                                 break;
                         }
                     }
-                } else if (cmdtype == 2) {//阻塞命令
+                } else if (cmdtype == 2) {//阻塞命令()，发送到motion_task任务去处理
                     for(i=0;i<num;i++) {
                         switch(buffer[c[i][0]]) {
-                            case 'S':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询步进电机状态  //设置步进电机
+                            case 'M':
+                                //查询状态
+                                printf("运动类型：%d\r\n",motion_state1.motion_type);
+                                if(motion_state1.current_motion >= 'A' && motion_state1.current_motion <= 'Z')
+                                    printf("当前运动目标：%c\r\n",motion_state1.current_motion);
+                                else
+                                    printf("当前没有运动目标\r\n");
+                                printf("步进电机状态：%#x\r\n",motion_state1.step_flag);
+                                printf("阀状态：%#x\r\n",motion_state1.valve_flag);
+                                break;
+                            case 'V':
+                                if (c[i][1] == 4) {//查询阀状态  //设置阀开关//Vnnb
                                     memcpy(command,buffer+c[i][0], c[i][1]);
-                                    command[0]='2';
+                                    //command[0]='V';
                                     command[c[i][1]]='\0';
-                                    xQueueSend(Step_Queue,command,10);//向Step_Queue队列中发送数据
+                                    xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
+                                }
+                                break;
+                            case 'S':
+                                if (c[i][1] == 8) {//查询步进电机状态  //设置步进电机
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    //command[0]='S';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 }
                                 break;
                             case 'P':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询蠕动泵状态  //设置蠕动泵
-
+                                if (c[i][1] == 8) {//查询蠕动泵状态  //设置蠕动泵
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    //command[0]='P';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 }
                                 break;
                             case 'R':
-                                if ((c[i][1] == 1) || (c[i][1] == 8)) {//查询旋转泵状态  //设置旋转泵
-                                    
+                                if (c[i][1] == 4) {//查询旋转泵状态  //设置旋转泵
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    //command[0]='R';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 }
                                 break;
                             case 'W':
-                                if (c[i][1] == 1) {//查询延时状态
+                                if (c[i][1] == 8) {//设置延时
+                                    memcpy(command,buffer+c[i][0], c[i][1]);
+                                    //command[0]='W';
+                                    command[c[i][1]]='\0';
+                                    xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 }
-                                else if (c[i][1] == 8) {//设置延时
-                                }
+                                break;
+                            case 'A'://复位运动
+                                memcpy(command,buffer+c[i][0], c[i][1]);
+                                //command[0]='A';
+                                command[1]='\0';
+                                xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 break;
                             default:
                                 break;
@@ -560,6 +723,136 @@ void com_task(void *pvParameters)
             }
         }
         //vTaskDelay(10);
+    }
+}
+
+//motion_task任务函数 只处理阻塞式任务()
+void motion_task(void *pvParameters)
+{
+    u8 buffer[CMD_LEN];
+    BaseType_t err;
+    u8 bits;
+    //u32 valve_state;
+    s32 steps;
+    u8 num;
+    //??有一个初始状态，把所有值归零，所有步进电机到起始位置
+    while(1) {
+        if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+            //运动模块互斥访问
+            
+
+            if(Motion_Queue!=NULL) {
+                memset(buffer,0,CMD_LEN);    //清除缓冲区
+
+                err=xQueueReceive(Motion_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+                if(err == pdTRUE) {
+                    switch(buffer[0]){
+                        case 'A'://复位命令
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='A';
+                            printf("复位命令:%s\r\n",buffer);
+                            //所有步进电机到起始位置，所有阀断电，柱塞泵要和阀配合，并加入必要的延时
+                        
+                        
+                            break;
+                        case 'V'://执行阀控制命令
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='V';
+                            printf("阀控制命令:%s\r\n",buffer);
+                            //(V011)
+                            bits=(buffer[1]-'0')*10+buffer[2]-'0';
+                            if (bits) {//bits>0相应的阀动作
+                                if(buffer[3]=='0')
+                                    motion_state1.valve_flag &= ~(1<<(bits-1));
+                                else
+                                    motion_state1.valve_flag |= 1<<(bits-1);
+                            }
+                            printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+                            SwitchOut(motion_state1.valve_flag);
+                            break;
+                        case 'S'://执行步进电机控制命令
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='S';
+                            printf("步进电机控制命令:%s\r\n",buffer);
+                            num=(buffer[1]-'0')*10+buffer[2]-'0';
+                        
+                            steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
+                            if((buffer[3]-'0') >= 4) steps=-steps;
+                            //StepMoto1Move(steps);
+
+                            if(num) {//??当num=5时，就是蠕动泵
+                                
+                                sum=StepMotoMove(num-1,0,steps,2);
+                                
+                                if(steps>0)
+                                {
+                                    //printf("now sum:%d\r\n",sum*2+steps*c1);
+                                    vTaskDelay(pdMS_TO_TICKS((sum*2+steps*c1)/1000));
+                                }
+                                else {
+                                    //printf("now sum:%d\r\n",sum*2-steps*c1);
+                                    vTaskDelay(pdMS_TO_TICKS((sum*2-steps*c1)/1000));
+                                }
+
+                            }
+
+                            break;
+                        case 'P'://执行蠕动泵控制命令  归到步进电机控制
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='P';
+                            printf("蠕动泵控制命令:%s\r\n",buffer);
+                            num=(buffer[1]-'0')*10+buffer[2]-'0';
+                            if(num==1) {
+
+                                    steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
+                                    if((buffer[3]-'0') >= 4) steps=-steps;
+                                    sum=StepMotoMove(4,0,steps,2);
+                                    if(steps>0)
+                                    {
+                                        //printf("now sum:%d\r\n",sum*2+steps*c1);
+                                        vTaskDelay(pdMS_TO_TICKS((sum*2+steps*c1)/1000));
+                                    }
+                                    else {
+                                        //printf("now sum:%d\r\n",sum*2-steps*c1);
+                                        vTaskDelay(pdMS_TO_TICKS((sum*2-steps*c1)/1000));
+                                    }
+
+                            }
+                            break;
+                        case 'R'://执行旋转泵控制命令  归到阀控制
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='R';
+                            printf("旋转泵控制命令:%s\r\n",buffer);
+                            //(R011)
+                            bits=(buffer[1]-'0')*10+buffer[2]-'0';
+                            if (bits==1) {//bits>0相应的阀动作
+                                if(buffer[3]=='0')
+                                    motion_state1.valve_flag &= ~(1<<(15-1));
+                                else
+                                    motion_state1.valve_flag |= 1<<(15-1);
+                            }
+                            printf("旋转泵状态:%#x\r\n",motion_state1.valve_flag);
+                            SwitchOut(motion_state1.valve_flag);
+                            break;
+                        case 'W'://执行延时控制命令
+                            motion_state1.motion_type=2;//阻塞运动()
+                            motion_state1.current_motion='W';
+                            printf("延时命令:%s\r\n",buffer);
+                        
+                            steps = (buffer[1]-'0')*1000000+(buffer[2]-'0')*100000+(buffer[3]-'0')*10000+
+                                    (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
+                            vTaskDelay(pdMS_TO_TICKS(steps));
+                            printf("延时结束\r\n");
+                            break;
+                    }
+                }
+                motion_state1.motion_type=0;//无运动 
+                motion_state1.current_motion=0;//无运动目标
+            }
+            
+            
+            xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+        } else printf("motion_task没有获得互斥信号量\r\n");
     }
 }
 
@@ -606,6 +899,7 @@ void hmi_task(void *pvParameters)
                     if(start_cnt == 0){
                         //Uart3_HMICmd("get rtc0", sizeof("get rtc0")-1);
                         Uart3_PutString("\x5A\xA5\x03\x81\x20\x07", 6);//5A A5 03 81 20 07 读取RTC
+                        memset(buffer,0,HMI_REC_LEN);
                         start_cnt++;
                     } else if(start_cnt < 10){
                         if((res == pdTRUE) && (buffer[1] == 0x20)){//收到有效数据
@@ -619,16 +913,16 @@ void hmi_task(void *pvParameters)
                             sec   = ((buffer[9] >> 4 ) & 0x0f)* 10 + (buffer[9] & 0x0f);
 
                             //printf("time_valid:%d\r\n",time_valid);
-                            printf("\r\n时间有效20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
+                            printf("\r\n时间有效20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);//??怎么到了这
                             //year=CorrectYear(year);
                             //CorrectDate(year,&month,&date);
                             //CorrectTime(&hour,&min,&sec);
                             //week=RTC_Get_Week(2000 + year,month,date);
-                            if(hour < 12)//?? 
-                                RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
-                            else
-                                RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
-                            RTC_Set_Date(year,month,date,week);    //设置日期
+//                            if(hour < 12)//?? 
+//                                RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
+//                            else
+//                                RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
+//                            RTC_Set_Date(year,month,date,week);    //设置日期
                             //time_valid = 1;
                             //start_cnt=10;
                             NextState = HMI_CHECK;
@@ -872,200 +1166,6 @@ void hmi_task(void *pvParameters)
     }
 }
 
-//valve_task任务函数 
-void valve_task(void *pvParameters)
-{
-    u8 buffer[CMD_LEN];
-    BaseType_t err;
-    static u32 valve_state;
-    u8 bits;
-    
-    u32 PreviousState = 0;
-    u32 CurrentState  = 0;
-    u32 NextState     = 0;
-    
-    while(1) {
-        switch(CurrentState) {
-//            case 0:
-//                CurrentState = COM_WAIT;
-//                NextState    = COM_WAIT;
-//                break;
-            case 1:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(Valve_Queue!=NULL) {
-                        memset(buffer,0,CMD_LEN);    //清除缓冲区
-
-                        err=xQueueReceive(Valve_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
-                        if(err == pdTRUE) {//执行阀控制命令
-                            printf("阀控制命令:%s\r\n",buffer);
-                            //V090
-                            bits=(buffer[1]-'0')*10+buffer[2]-'0';
-                            if (bits) {//bits>0相应的阀动作
-                                if(buffer[3]=='0')
-                                    valve_state &= ~(1<<(bits-1));
-                                else
-                                    valve_state |= 1<<(bits-1);
-                            }
-                            printf("阀状态:%#x\r\n",valve_state);
-                            SwitchOut(valve_state);
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-//            case 2:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-            default:
-                vTaskDelay(pdMS_TO_TICKS(500));
-                valve_state = 0;//所有阀关闭
-                printf("阀状态:%#x\r\n",valve_state);
-                SwitchOut(valve_state);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                CurrentState = 1;
-                NextState    = 1;
-                break;
-
-        }
-    }
-}
-
-//step_task任务函数 
-void step_task(void *pvParameters)
-{
-    u8 buffer[CMD_LEN];
-    BaseType_t err;
-    s32 steps;
-    u8 num;
-
-    while(1) {
-        if(Step_Queue!=NULL) {
-            memset(buffer,0,CMD_LEN);    //清除缓冲区
-
-            err=xQueueReceive(Step_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
-            if(err == pdTRUE) {//执行步进电机控制命令
-                printf("步进电机控制命令:%s\r\n",buffer);
-                num=(buffer[1]-'0')*10+buffer[2]-'0';
-                switch(num) {
-                    case 1:
-                        steps = (buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
-                        if((buffer[3]-'0') >= 4) steps=-steps;
-                        StepMoto1Move(steps);
-//  vTaskDelay(2000);
-//  TIM_Cmd(TIM3, DISABLE);
-//  GetPWMCnt  = TIM_GetCounter(TIM3);
-//  TIM_SetCounter(TIM3, 0); 
-//  TIM_Cmd(TIM3, ENABLE);
-//  printf("实际步数:%d\r\n",GetPWMCnt);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-    }
-}
-
-//u32 ad[16];
-void crp_task(void *pvParameters)
-{
-    u32 ad;
-//    u8 year,month,date,week;
-//    u8 hour,min,sec,ampm;
-//    u32 PreviousState = CRP_START;
-//    u32 CurrentState  = CRP_START;
-//    u32 NextState     = CRP_START;
-    AD7799_Init(ADC_CON_GAIN1);
-    AD7799_Start(ADC_CON_CH1,ADC_CON_GAIN1,ADC_MODE_CONTINUOUS,0x01); 		
-    vTaskDelay(5000);
-    while(1) {
-
-            vTaskDelay(500);
-            AD7799_WaitBusy();
-            ad=AD7799_Read();
-            printf("%d\t%.6f\r\n",ad,(double)ad*2.495/16777216);
-
-//        vTaskDelay(5000);
-//        RTC_Get_Time(&hour,&min,&sec,&ampm);//得到时间            
-//        RTC_Get_Date(&year,&month,&date,&week);
-//        printf("20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);
-
-        /*
-        switch(CurrentState)
-        {
-            case CRP_START:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-            case CRP_CHECK:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_ANALY:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_QC:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_SET:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_SYS:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_OFF:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-           case CRP_OTHER:
-           default:
-                CurrentState = 1;
-                NextState    = 1;
-                break;
-
-        }*/
-        
-    }
-}
 
 /*------------------MAIN 结束------------------*/
 //查找字符串中的有效命令，并把字母变成大写
@@ -1142,7 +1242,7 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n)
                     }
                     if(buf[i] == 'D'|| buf[i] == 'N'|| buf[i] == 'P'|| buf[i] == 'R'||
                        buf[i] == 'S'|| buf[i] == 'T'|| buf[i] == 'V'|| buf[i] == 'W'||
-                       buf[i] == 'F'){//第一个字母有效
+                       buf[i] == 'F'|| buf[i] == 'M'|| buf[i] == 'A'|| buf[i] == 'B'){//第一个字母有效
 
                     } else {//第一个字母无效
                         valid=0;

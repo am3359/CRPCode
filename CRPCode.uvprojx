@@ -365,7 +365,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\AD7799;.\HARDWARE\DMA;.\HARDWARE\HC595;.\HARDWARE\SPI;.\HARDWARE\STEPMOTO;.\HARDWARE\TIMER;.\HARDWARE\W25QXX;.\HARDWARE\RTC;.\MALLOC;.\FATFS\src;.\FATFS\exfuns</IncludePath>
+              <IncludePath>.\CORE;.\FWLIB\inc;.\USER;.\SYSTEM\delay;.\SYSTEM\sys;.\SYSTEM\usart;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM4F;.\HARDWARE\AD7799;.\HARDWARE\DMA;.\HARDWARE\HC595;.\HARDWARE\SPI;.\HARDWARE\STEPMOTO;.\HARDWARE\TIMER;.\HARDWARE\W25QXX;.\HARDWARE\RTC;.\HARDWARE\EXTI;.\MALLOC;.\FATFS\src;.\FATFS\exfuns</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -488,6 +488,11 @@
               <FileType>1</FileType>
               <FilePath>.\FWLIB\src\stm32f4xx_pwr.c</FilePath>
             </File>
+            <File>
+              <FileName>stm32f4xx_exti.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\FWLIB\src\stm32f4xx_exti.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -552,6 +557,11 @@
               <FileName>rtc.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\RTC\rtc.c</FilePath>
+            </File>
+            <File>
+              <FileName>exti.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\EXTI\exti.c</FilePath>
             </File>
           </Files>
         </Group>

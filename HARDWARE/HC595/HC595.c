@@ -40,9 +40,11 @@ void HC595Send(u8 data)
             HC595_DA = 0;
         HC595_CK = 0;              //上升沿发生移位
         //delay(1);
+        delay_us(1);//??需要吗
         data <<= 1;
         HC595_CK = 1;
 		//delay(1);
+        delay_us(1);//??需要吗
   }
 	//HC595Load();
 }

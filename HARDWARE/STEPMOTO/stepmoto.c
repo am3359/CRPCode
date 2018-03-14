@@ -2,99 +2,135 @@
 #include "dma.h"
 #include "timer.h"
 #include "delay.h"
+#include "math.h"
+#include "usart.h"
 
-//const u16 SteppMotoBuf1[StepBufLen1]={
-//    0x7AB6,0x7AB6,0x7AB6,0x7AB6,
-//    0x7AB6,0x7AB5,0x7AB4,0x7AB3,
-//    0x7AB0,0x7AAC,0x7AA6,0x7A9B,
-//    0x7A8A,0x7A6D,0x7A3D,0x79EF,
-//    0x796F,0x789E,0x774C,0x752F,
-//    0x71DF,0x6CD1,0x6572,0x5B5C,
-//    0x4EB3,0x406C,0x3225,0x257C,
-//    0x1B66,0x1407,0x0EF9,0x0BA9,
-//    0x098C,0x083A,0x0769,0x06E9,
-//    0x069B,0x066B,0x064E,0x063D,
-//    0x0632,0x062C,0x0628,0x0625,
-//    0x0624,0x0623,0x0622,0x0622,};
+u16 SteppAccelBuf[2][StepBufLen];
+u16 SteppDecelBuf[2][StepBufLen];
+u16 SteppRun[2];
+//u16 Stepper_Run=2000;//c1
 
-//const u16 SteppMotoBuf1[StepBufLen1]={//平滑 快 speed=80rad/s
-//    0x0449,0x0449,0x0449,0x0448,0x0448,
-//    0x0447,0x0447,0x0446,0x0445,0x0444,
-//    0x0442,0x0441,0x043F,0x043D,0x043B,
-//    0x0439,0x0436,0x0432,0x042E,0x042A,
-//    0x0425,0x041F,0x0418,0x0411,0x0408,
-//    0x03FE,0x03F3,0x03E7,0x03D9,0x03CA,
-//    0x03BA,0x03A8,0x0394,0x037F,0x0368,
-//    0x0351,0x0338,0x031E,0x0304,0x02EA,
-//    0x02CF,0x02B5,0x029B,0x0282,0x026B,
-//    0x0254,0x023F,0x022B,0x0219,0x0209,
-//    0x01FA,0x01EC,0x01E0,0x01D5,0x01CB,
-//    0x01C2,0x01BB,0x01B4,0x01AE,0x01A9,
-//    0x01A5,0x01A1,0x019D,0x019A,0x0198,
-//    0x0196,0x0194,0x0192,0x0191,0x018F,
-//    0x018E,0x018D,0x018C,0x018C,0x018B,
-//    0x018B,0x018A,0x018A,0x018A,0x0189,};
+TStepMotor StepMotor[5]={
+    {//横向运动
+        GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_5,GPIOE,GPIO_Pin_7,
+        TIM4,TIM_DMA_CC1,(1<<0),
+        RCC_AHB1Periph_DMA1,DMA1_Stream0,DMA_Channel_2,
+        0,0,0,0,0,1,Bit_RESET,
+        {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
+        {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
+        {StepBufLen,StepBufLen,StepBufLen},
+        {
+            {2000,1600,50},//L慢 [B200016000050] (S0141600;S0101600) acc pulse:28 acc time:50600 us
+            {2000,1200,50},//M中 [B200012000050] (S0141600;S0101600) acc pulse:30 acc time:48400 us
+            {2000, 800,50} //H高 [B200008000050] (S0141600;S0101600) acc pulse:32 acc time:45400 us
+        }
+    },
+    {//上下运动
+        GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_4,GPIOE,GPIO_Pin_8,
+        TIM4,TIM_DMA_CC2,(1<<4),
+        RCC_AHB1Periph_DMA1,DMA1_Stream3,DMA_Channel_2,
+        0,0,0,0,0,1,Bit_SET,
+        {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
+        {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
+        {StepBufLen,StepBufLen,StepBufLen},
+        {
+            {1200,1000,50},//L慢 [B120010000050] acc pulse:24 acc time:26500 us
+            {1100, 750,40},//M中 [B110007500040] acc pulse:34 acc time:31625 us
+            {1000, 500,30} //H高 [B100005000030] acc pulse:48 acc time:36250 us
+        }
+    },
+    {//注射器1
+        GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_6,GPIOE,GPIO_Pin_9,
+        TIM3,TIM_DMA_CC1,(1<<0),
+        RCC_AHB1Periph_DMA1,DMA1_Stream4,DMA_Channel_5,
+        0,0,0,0,0,1,Bit_SET,
+        {SteppAccelBuf[1],&SteppRun[1],SteppDecelBuf[1]},
+        {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
+        {StepBufLen,StepBufLen,StepBufLen},
+        {
+            {1600,1500,50},//L慢 [B160015000050] acc pulse:22 acc time:34150 us
+            {1600,1000,50},//M中 [B160010000050] acc pulse:30 acc time:39300 us
+            {1600, 500,50} //H高 [B160005000050] acc pulse:32 acc time:34150 us
+        }
+    },
+    {//注射器2
+        GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_2,GPIOE,GPIO_Pin_10,
+        TIM3,TIM_DMA_CC2,(1<<4),
+        RCC_AHB1Periph_DMA1,DMA1_Stream5,DMA_Channel_5,
+        0,0,0,0,0,1,Bit_SET,
+        {SteppAccelBuf[1],&SteppRun[1],SteppDecelBuf[1]},
+        {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
+        {StepBufLen,StepBufLen,StepBufLen},
+        {
+            {1600,1500,50},//L慢 [B160015000050] acc pulse:22 acc time:34150 us
+            {1600,1000,50},//M中 [B160010000050] acc pulse:30 acc time:39300 us
+            {1600, 500,50} //H高 [B160005000050] acc pulse:32 acc time:34150 us
+        }
+    },
+    {//蠕动泵1
+        GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_3,GPIOE,GPIO_Pin_7,
+        TIM4,TIM_DMA_CC3,(1<<8),
+        RCC_AHB1Periph_DMA1,DMA1_Stream7,DMA_Channel_2,
+        0,0,0,0,0,0,Bit_SET,
+        {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
+        {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
+        {StepBufLen,StepBufLen,StepBufLen},
+        {
+            {3500,3000,50},//L慢 [B350030000050] acc pulse:28 acc time:91250 us
+            {3500,2000,50},//M中 [B350020000050] acc pulse:34 acc time:94250 us
+            {3500,1000,50} //H高 [B350010000050] acc pulse:36 acc time:82250 us
+        }
+    },
+};
 
-//const u16 SteppMotoBuf1[StepBufLen1]={//平滑 中 speed=40rad/s
-//0x044B,0x044A,0x044A,0x044A,0x044A,
-//0x044A,0x0449,0x0449,0x0449,0x0448,
-//0x0447,0x0447,0x0446,0x0445,0x0444,
-//0x0443,0x0442,0x0440,0x043F,0x043D,
-//0x043A,0x0438,0x0435,0x0431,0x042D,
-//0x0429,0x0424,0x041F,0x0419,0x0412,
-//0x040B,0x0403,0x03FA,0x03F0,0x03E6,
-//0x03DC,0x03D1,0x03C5,0x03BA,0x03AE,
-//0x03A2,0x0397,0x038B,0x0380,0x0376,
-//0x036C,0x0362,0x0359,0x0351,0x034A,
-//0x0343,0x033D,0x0338,0x0333,0x032F,
-//0x032B,0x0327,0x0324,0x0322,0x031F,
-//0x031D,0x031C,0x031A,0x0319,0x0318,
-//0x0317,0x0316,0x0315,0x0315,0x0314,
-//0x0313,0x0313,0x0313,0x0312,0x0312,
-//0x0312,0x0312,0x0312,0x0311,0x0311,};
 
-const u16 SteppMotoBuf1[StepBufLen1]={//平滑 慢 speed=30rad/s
-    0x044B,0x044B,0x044B,0x044B,0x044B,
-    0x044B,0x044B,0x044B,0x044B,0x044B,
-    0x044B,0x044B,0x044B,0x044A,0x044A,
-    0x044A,0x044A,0x044A,0x0449,0x0449,
-    0x0449,0x0448,0x0448,0x0447,0x0446,
-    0x0446,0x0445,0x0444,0x0443,0x0442,
-    0x0441,0x043F,0x043E,0x043C,0x043A,
-    0x0439,0x0437,0x0435,0x0433,0x0431,
-    0x042F,0x042D,0x042B,0x0429,0x0428,
-    0x0426,0x0424,0x0423,0x0421,0x0420,
-    0x041F,0x041E,0x041D,0x041C,0x041C,
-    0x041B,0x041A,0x041A,0x0419,0x0419,
-    0x0419,0x0418,0x0418,0x0418,0x0418,
-    0x0418,0x0417,0x0417,0x0417,0x0417,
-    0x0417,0x0417,0x0417,0x0417,0x0417,
-    0x0417,0x0417,0x0417,0x0417,0x0417,};
-    
-u16 SteppAccelBuf[StepBufLen1];
-u16 SteppDecelBuf[StepBufLen1];
-s32 Stepper_Mid_Steps;
-u16 Stepper_Run=20000;
-s8 Stepper_Period=0;
+//u16 SteppAccelBuf[StepBufLen];
+//u16 SteppDecelBuf[StepBufLen];
+//u32 Stepper_Mid_Steps;//匀速步数
+
+//s8 Stepper_Period;//运行阶段
+//u8 Stepper_Mode;//运行模式
+//u8 Stepper_Change;//加减速步数  Stepper_Change+Stepper_Change+Stepper_Mid_Steps=总步数
+//u8 Stepper_Change1;//保存 Stepper_Change+Stepper_Change>Steps时的值
 
 void StepGPIO_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
 
+    //RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
     //配置PB6，作为TIM4_Ch1 PWM输出STEP
     GPIO_PinAFConfig(GPIOB,GPIO_PinSource6,GPIO_AF_TIM4);
+    //配置PB7，作为TIM4_Ch2 PWM输出STEP
+    GPIO_PinAFConfig(GPIOB,GPIO_PinSource7,GPIO_AF_TIM4);
+    //配置PB8，作为TIM4_Ch3 PWM输出STEP
+    GPIO_PinAFConfig(GPIOB,GPIO_PinSource8,GPIO_AF_TIM4);
     
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+    //配置PC6，作为TIM3_Ch1 PWM输出STEP
+    GPIO_PinAFConfig(GPIOC,GPIO_PinSource6,GPIO_AF_TIM3);
+    //配置PC7，作为TIM3_Ch2 PWM输出STEP
+    GPIO_PinAFConfig(GPIOC,GPIO_PinSource7,GPIO_AF_TIM3);
+
+    //步进电机脉冲：PB6横向运动，PB7上下运动，PB8蠕动泵旋转
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_8;// | GPIO_Pin_10 | GPIO_Pin_11;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;//GPIO_Speed_100MHz;//GPIO_Speed_2MHz;//
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
     //GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOB,&GPIO_InitStructure);
     
-    //PD0->SLP PD1->EN PD5->DIR
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_5;
+    //步进电机脉冲：PC6注射器1(步进电机3)，PC7注射器2(步进电机4)
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;// | GPIO_Pin_10 | GPIO_Pin_11;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;//GPIO_Speed_100MHz;//GPIO_Speed_2MHz;//
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    //GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(GPIOC,&GPIO_InitStructure);
+    
+    //PD0->SLP,PD1->EN,PD4->横向运动DIR,PD5->上下运动DIR,PD6->注射器1DIR,PD2->注射器2DIR PD3->蠕动泵DIR 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_6;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//输出
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
@@ -108,7 +144,7 @@ void StepMotoInit(void)
     SLP1=1;//SLP1=0;
     EN1=0;//EN1=1;
     DIR1=0;//DIR1=1;
-    STP1=1;//STP1=0;
+    //STP1=1;//STP1=0;
     delay_us(2000);
     SLP1=0;//SLP1=1;
     delay_us(2000);
@@ -118,89 +154,301 @@ void StepMotoInit(void)
     SLP1=1;//SLP1=0;
 	DMA1_Init();
 	TIM4_PWM_Config();
+    TIM3_PWM_Config();
 }
 
 /************************************************************************************
-函数名称：步进电机1控制函数
-输入参数：
-输出参数：
+函数名称：步进电机加减速S曲线计算函数，保证加速或减速时间在100ms~1000ms
+输入参数：初始计数值c0,目标速度计数值c1,a斜率输入参数扩大了100倍，需要除以100,计数缓冲区pBuf[]
+输出参数：返回加减速步数
 功能描述：S曲线计算，根据输入参数更新加速度缓冲区，加速度和减速度相同，启动DMA PWM
 ************************************************************************************/
-void StepMoto1Move(s32 steps)//??载入S曲线时可以修改占空比，使高脉冲是最快速度时周期的一半
+u16 tmpS[StepBufLen];//计算S曲线用
+//#define PRT 1
+u32 StepMotoCal(u16 c0,u16 c1,u16 a)
+{//??没有考虑加减速步数相加超过总步数
+    //u16 tmpS[StepBufLen];//计算S曲线用
+    u8 i,j;
+    u32 sum=0;
+
+    for(i=0;i<StepBufLen;i++)
+        tmpS[i]=(u16)(((double)c1-(double)c0)/(1.0+exp(-(double)a*((double)i-StepBufLen/2)/100.0))+(double)c0+0.5);
+
+    for(i=0;i<StepBufLen/2-1;i++){
+        j=i;
+        if(tmpS[i]>tmpS[i+1]) break;
+    }
+
+    for(i=0;i<StepBufLen-j*2;i++){//减速是加速的反转
+        sum=sum+tmpS[StepBufLen-j-1-i];
+        printf("A%d\t%d\r\n",i+1,tmpS[i+j]);delay_us(1000);
+    }
+    for(i=0;i<StepBufLen-j*2;i++){//减速是加速的反转
+        printf("D%d\t%d\r\n",i+1,tmpS[StepBufLen-j-1-i]);delay_us(1000);
+    }
+
+    printf("acc pulse:%d acc time:%d us\r\n",StepBufLen-j*2,sum);
+
+    return sum;
+}
+
+//no步进电机编号0~4，level速度模式
+//void StepMotoCal1(u8 no,u8 level)
+//{//??没有考虑加减速步数相加超过总步数
+//    //u16 tmpS[StepBufLen];//计算S曲线用
+//    u16 i,j;
+//    u16 c0,c1,a;
+//    StepMotor[no].level=level;
+//    c0=StepMotor[no].SetStepMotor[level].c0;
+//    c1=StepMotor[no].SetStepMotor[level].c1;
+//    a=StepMotor[no].SetStepMotor[level].a;
+
+//    for(i=0;i<StepBufLen;i++)
+//        tmpS[i]=(u16)(((double)c1-(double)c0)/(1.0+exp(-(double)a*((double)i-StepBufLen/2)/100.0))+(double)c0+0.5);
+//    
+//    for(i=0;i<StepBufLen/2-1;i++){
+//        j=i;
+//        if(tmpS[i]>tmpS[i+1]) break;
+//    }
+
+//    for(i=0;i<StepBufLen-j*2;i++){//加减速数据保存
+//        StepMotor[no].AccelBuf[i]=tmpS[j+i];
+//        StepMotor[no].DecelBuf[i]=tmpS[StepBufLen-j-1-i];
+//    }
+
+//    StepMotor[no].ADSize=StepBufLen-j*2;
+//}
+
+
+/************************************************************************************
+函数名称：步进电机1控制函数
+输入参数：no步进电机编号，mode步进电机运行模式，steps步数,偶数步，目标速度计数值c1
+         模式0：加速，匀速，减速；
+         模式1：加速，匀速，忽略步数；
+         模式2：匀速，忽略加减速和步数；
+         模式3：匀速，减速；
+         level 默认速度 0：慢，1：中，2：快
+输出参数：
+功能描述：加速度和减速度相同，启动DMA PWM
+************************************************************************************/
+u32 StepMotoMove(u8 no,u8 mode,s32 steps,u8 level)//??载入S曲线时可以修改占空比，使高脉冲是最快速度时周期的一半
 {
-    //s32 Start_Steps = 0;
-    //u32 steps;
-//-----------------------------------------------------------------------------------
-	u16 i;														 								 //加速曲线表格初始化
-	for(i = 0;i<StepBufLen1;i++)
-		SteppAccelBuf[i] = SteppMotoBuf1[i];
-	
-	for(i = 0;i<StepBufLen1;i++)
-		SteppDecelBuf[i] = SteppAccelBuf[StepBufLen1-1-i];
-//-----------------------------------------------------------------------------------	
+    u32 sum=0;
+    
+    u16 i,j;
+    u16 c0,c1,a;
+    
     if(steps < 0)
     {//反转
-        DIR1=1;
+        //DIR1=1;
+        GPIO_SetBits(StepMotor[no].Dir_GPIO, StepMotor[no].Dir_GPIO_Pin);//GPIO_ResetBits
         steps =-steps;
     }
     else
     {//正转
-        DIR1=0;
+        //DIR1=0;
+        GPIO_ResetBits(StepMotor[no].Dir_GPIO, StepMotor[no].Dir_GPIO_Pin);//GPIO_SetBits
         //steps =steps;
     }
     
-    Stepper_Run = SteppAccelBuf[StepBufLen1-1];         //匀速时的运行频率
-    Stepper_Mid_Steps = steps - StepBufLen1*2; //匀速阶段步数            ??还需要考虑短行程，速度模式等情况??
+//如果向限位运动并且已经在限位
+if(StepMotor[no].LmtEn)
+{
+    if(GPIO_ReadOutputDataBit (StepMotor[no].Dir_GPIO,StepMotor[no].Dir_GPIO_Pin)==StepMotor[no].LmtBit) {
+        if(GPIO_ReadInputDataBit(StepMotor[no].Lmt_GPIO, StepMotor[no].Lmt_GPIO_Pin)==Bit_RESET)
+            return sum;
+    }
+}
+   
+    //先计算加减速参数
+    StepMotor[no].mode = mode;
+
+    StepMotor[no].level=level;
+    c0=StepMotor[no].SetStepMotor[level].c0;
+    c1=StepMotor[no].SetStepMotor[level].c1;
+    a=StepMotor[no].SetStepMotor[level].a;
+
+    for(i=0;i<StepBufLen;i++)
+        tmpS[i]=(u16)(((double)c1-(double)c0)/(1.0+exp(-(double)a*((double)i-StepBufLen/2)/100.0))+(double)c0+0.5);
     
-    Stepper_Period=3;
-  SLP1=0;//SLP1=1;
-    //DMA1_Stream0_CH2_Cmd(&TIM4_PWMDMA_Config,SteppAccelBuf,StepBufLen1,DMA_MemoryInc_Enable);
-    TIM4_PWMDMA_Config(SteppAccelBuf,StepBufLen1,DMA_MemoryInc_Enable);
-    DMA_Cmd(DMA1_Stream0,ENABLE);
-    TIM_DMACmd(TIM4,TIM_DMA_CC1,ENABLE);
-    TIM4->CCER |= 1<<0; //开TME4 PWM输出
-    TIM_Cmd(TIM4,ENABLE);
+    for(i=0;i<StepBufLen/2-1;i++){
+        j=i;
+        if(tmpS[i]>tmpS[i+1]) break;
+    }
+
+    for(i=0;i<StepBufLen-j*2;i++){//加减速数据保存
+        sum=sum+tmpS[j+i];
+        *(StepMotor[no].Buf[0]+i)=tmpS[j+i];
+        *(StepMotor[no].Buf[2]+i)=tmpS[StepBufLen-j-1-i];
+    }
+    *(StepMotor[no].Buf[1]+0)=c1;//匀速数据
+
+    StepMotor[no].Size[0]=StepBufLen-j*2;
+    StepMotor[no].Size[2]=StepBufLen-j*2;
+//printf("acc pulse:%d acc time:%d us\r\n",StepBufLen-j*2,sum);
+//    for(i=0;i<StepBufLen-j*2;i++){//减速是加速的反转
+//        printf("A%d\t%d\r\n",i+1,*(StepMotor[no].Buf[0]+i));delay_us(1000);
+//    }
+//    for(i=0;i<StepBufLen-j*2;i++){//减速是加速的反转
+//        printf("D%d\t%d\r\n",i+1,*(StepMotor[no].Buf[2]+i));delay_us(1000);
+//    }
+    
+//SLP1=0;//SLP1=1;
+GPIO_ResetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_SetBits//退出休眠
+    switch(mode)
+    {
+        case 0://模式0：加速，匀速，减速；
+            if(steps > (StepMotor[no].Size[0]+StepMotor[no].Size[2])) {
+                StepMotor[no].Size[1] = steps - (StepMotor[no].Size[0]+StepMotor[no].Size[2]); //匀速阶段步数            ??还需要考虑短行程，速度模式等情况??
+            } else {
+                StepMotor[no].Size[0] = steps/2;//??加减速有长短是有问题
+                StepMotor[no].Size[1] = 0;
+                StepMotor[no].Size[2] = steps/2;
+            }
+            StepMotor[no].stage=0;//加速  0：加速，1：匀速，2：减速，3或其它：停止
+            TIM_PWM_DMA_Config(no);
+            break;
+        case 1://模式1：加速，匀速，忽略步数；
+            StepMotor[no].Size[1] = 200;
+            StepMotor[no].stage=0;//加速  0：加速，1：匀速，2：减速，3或其它：停止
+            TIM_PWM_DMA_Config(no);
+            break;
+        case 2://模式2：匀速，忽略加减速和步数；
+            StepMotor[no].Size[1] = 200;
+            StepMotor[no].stage=1;//匀速  0：加速，1：匀速，2：减速，3或其它：停止
+            TIM_PWM_DMA_Config(no);
+            break;
+        case 3://模式3：匀速，减速；
+            if(steps > StepMotor[no].Size[2]) {
+                StepMotor[no].Size[1] = steps - StepMotor[no].Size[2]; //匀速阶段步数            ??还需要考虑短行程，速度模式等情况??
+                StepMotor[no].stage=1;//匀速  0：加速，1：匀速，2：减速，3或其它：停止
+            } else {
+                StepMotor[no].Size[1] = 0;
+                StepMotor[no].Size[2] = steps;
+                StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+            }
+            TIM_PWM_DMA_Config(no);
+            break;
+    }
+    return sum;
+}
+
+void StepMotorHandler(u8 no)
+{
+    switch(StepMotor[0].mode)
+    {
+        case 0://模式0：加速，匀速，减速；
+            if(StepMotor[no].stage==0) {
+                if(StepMotor[no].Size[1]>0)
+                {
+                    StepMotor[no].stage=1;//匀速  0：加速，1：匀速，2：减速，3或其它：停止
+                } else {
+                    StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+                }
+                TIM_PWM_DMA_Config(no);
+            } else if(StepMotor[no].stage==1) {
+                StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+                TIM_PWM_DMA_Config(no);
+            } else {
+                StepMotor[no].stage=3;
+                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+                TIM_Cmd((StepMotor[no].timer),DISABLE);
+//SLP1=1;//SLP1=0;
+GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+            }
+            break;
+        case 1://模式1：加速，匀速，忽略步数；
+        case 2://模式2：匀速，忽略加减速和步数；
+            if(StepMotor[no].stage==0) {
+                StepMotor[no].stage=1;//匀速  0：加速，1：匀速，2：减速，3或其它：停止
+                TIM_PWM_DMA_Config(no);
+            } else if(StepMotor[no].stage==1) {
+                //StepMotor[no].stage=1;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+                TIM_PWM_DMA_Config(no);
+            } else {
+                StepMotor[no].stage=3;
+                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+                TIM_Cmd((StepMotor[no].timer),DISABLE);
+//SLP1=1;//SLP1=0;
+GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+            }
+            break;
+        case 3://模式3：匀速，减速；
+            if(StepMotor[no].stage==1) {
+                StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+                TIM_PWM_DMA_Config(no);
+            } else {
+                StepMotor[no].stage=3;
+                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+                TIM_Cmd((StepMotor[no].timer),DISABLE);
+//SLP1=1;//SLP1=0;
+GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+            }
+            break;
+        default:
+            DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+            TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+            (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+            TIM_Cmd((StepMotor[no].timer),DISABLE);
+//SLP1=1;//SLP1=0;
+GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+            break;
+    }
 }
 
 void DMA1_Stream0_IRQHandler(void)
 {	
 	if(DMA_GetITStatus(DMA1_Stream0,DMA_IT_TCIF0)==SET)
     {
-		DMA_ClearFlag(DMA1_Stream0,DMA_IT_TCIF0);
-		
-		if(--Stepper_Period>0)//根据当前调速阶段重新配置DMA
-		{
-			if(Stepper_Mid_Steps<0)
-                {//不可用???
-				Stepper_Mid_Steps = -Stepper_Mid_Steps;
-				//DMA1_Stream0_CH2_Cmd(&TIM4_PWMDMA_Config,&SteppDecelBuf[StepBufLen1+Stepper_Mid_Steps],Stepper_Mid_Steps,DMA_MemoryInc_Enable);
-                TIM4_PWMDMA_Config(&SteppDecelBuf[StepBufLen1-Stepper_Mid_Steps],Stepper_Mid_Steps,DMA_MemoryInc_Enable);
-                DMA_Cmd(DMA1_Stream0,ENABLE);
-				Stepper_Period = 1;
-			}
-			else
-			{
-				if(Stepper_Period == 2)
-                {
-					//DMA1_Stream0_CH2_Cmd(&TIM4_PWMDMA_Config,&Stepper_Run,Stepper_Mid_Steps,DMA_MemoryInc_Disable);
-                    TIM4_PWMDMA_Config(&Stepper_Run,Stepper_Mid_Steps,DMA_MemoryInc_Disable);
-                    DMA_Cmd(DMA1_Stream0,ENABLE);
-                }
-				if(Stepper_Period == 1)
-                {
-					//DMA1_Stream0_CH2_Cmd(&TIM4_PWMDMA_Config,SteppDecelBuf,StepBufLen1,DMA_MemoryInc_Enable);
-                    TIM4_PWMDMA_Config(SteppDecelBuf,StepBufLen1,DMA_MemoryInc_Enable);
-                    DMA_Cmd(DMA1_Stream0,ENABLE);
-                }
-			}
-		}
-		else
-		{
-			DMA_Cmd(DMA1_Stream0,DISABLE);
-			TIM_DMACmd(TIM4,TIM_DMA_CC1,DISABLE);
-			TIM4 -> CCER &= ~(1<<0); //关闭TME4 PWM输出
-			//flag_DMA1_Stream0_CH2 = 0;
-  SLP1=1;//SLP1=0;
-		}
+        DMA_ClearFlag(DMA1_Stream0,DMA_IT_TCIF0);
+
+        StepMotorHandler(0);
     }
 }
+
+void DMA1_Stream3_IRQHandler(void)
+{	
+	if(DMA_GetITStatus(DMA1_Stream3,DMA_IT_TCIF3)==SET)
+    {
+		DMA_ClearFlag(DMA1_Stream3,DMA_IT_TCIF3);
+
+        StepMotorHandler(1);
+    }
+}
+
+void DMA1_Stream7_IRQHandler(void)
+{	
+	if(DMA_GetITStatus(DMA1_Stream7,DMA_IT_TCIF7)==SET)
+    {
+		DMA_ClearFlag(DMA1_Stream7,DMA_IT_TCIF7);
+
+        StepMotorHandler(4);
+    }
+}
+
+void DMA1_Stream4_IRQHandler(void)
+{	
+	if(DMA_GetITStatus(DMA1_Stream4,DMA_IT_TCIF4)==SET)
+    {
+        DMA_ClearFlag(DMA1_Stream4,DMA_IT_TCIF4);
+
+        StepMotorHandler(2);
+    }
+}
+
+void DMA1_Stream5_IRQHandler(void)
+{	
+	if(DMA_GetITStatus(DMA1_Stream5,DMA_IT_TCIF5)==SET)
+    {
+        DMA_ClearFlag(DMA1_Stream5,DMA_IT_TCIF5);
+
+        StepMotorHandler(3);
+    }
+}
+
