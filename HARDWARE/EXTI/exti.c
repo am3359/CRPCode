@@ -4,7 +4,15 @@
 //#include "led.h" 
 //#include "key.h"
 //#include "beep.h"
+#include "stepmoto.h"
 
+void PWM_OFF(u8 no)
+{
+    DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+    TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+    (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+    TIM_Cmd((StepMotor[no].timer),DISABLE);
+}
 
 //外部中断5~9服务程序
 void EXTI9_5_IRQHandler(void)
@@ -13,30 +21,24 @@ void EXTI9_5_IRQHandler(void)
     if(EXTI_GetITStatus(EXTI_Line7) != RESET) {
         
         if(!GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_5)) {
-            //DMA_Cmd(DMA1_Stream0,DISABLE);
-            //TIM_DMACmd(TIM4,TIM_DMA_CC1,DISABLE);
-            //TIM4 -> CCER &= ~(1<<0); //关闭TIM4 PWM输出
-PDout(0)=1;
+            PWM_OFF(0);
+//PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line7);    // Clear the EXTI line 7 pending bit  
     }
     if(EXTI_GetITStatus(EXTI_Line8) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_4)) {
-            //DMA_Cmd(DMA1_Stream0,DISABLE);
-            //TIM_DMACmd(TIM4,TIM_DMA_CC1,DISABLE);
-            //TIM4 -> CCER &= ~(1<<0); //关闭TIM4 PWM输出
-PDout(0)=1;
+            PWM_OFF(1);
+//PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line8);    // Clear the EXTI line 8 pending bit  
     }
     if(EXTI_GetITStatus(EXTI_Line9) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_6)) {
-            //DMA_Cmd(DMA1_Stream0,DISABLE);
-            //TIM_DMACmd(TIM4,TIM_DMA_CC1,DISABLE);
-            //TIM4 -> CCER &= ~(1<<0); //关闭TIM4 PWM输出
-PDout(0)=1;
+            PWM_OFF(2);
+//PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line9);    // Clear the EXTI line 9 pending bit  
     }
@@ -47,10 +49,8 @@ void EXTI15_10_IRQHandler(void)
     if(EXTI_GetITStatus(EXTI_Line10) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_2)) {
-            //DMA_Cmd(DMA1_Stream0,DISABLE);
-            //TIM_DMACmd(TIM4,TIM_DMA_CC1,DISABLE);
-            //TIM4 -> CCER &= ~(1<<0); //关闭TIM4 PWM输出
-PDout(0)=1;
+            PWM_OFF(3);
+//PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line10);    // Clear the EXTI line 10 pending bit  
     }
@@ -87,13 +87,13 @@ void EXTIX_Init(void)
     EXTI_Init(&EXTI_InitStructure);//配置
  
 	NVIC_InitStructure.NVIC_IRQChannel = EXTI9_5_IRQn;//外部中断5~9
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x04;//抢占优先级4
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x03;//抢占优先级3
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x00;//子优先级0
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;//使能外部中断通道
     NVIC_Init(&NVIC_InitStructure);//配置
 	
 	NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;//外部中断10~15
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x05;//抢占优先级5
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x04;//抢占优先级4
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x00;//子优先级0
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;//使能外部中断通道
     NVIC_Init(&NVIC_InitStructure);//配置

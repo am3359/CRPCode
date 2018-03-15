@@ -15,7 +15,7 @@ TStepMotor StepMotor[5]={
         GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_5,GPIOE,GPIO_Pin_7,
         TIM4,TIM_DMA_CC1,(1<<0),
         RCC_AHB1Periph_DMA1,DMA1_Stream0,DMA_Channel_2,
-        0,0,0,0,0,1,Bit_RESET,
+        0,0,0,0,3,1,Bit_RESET,
         {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
         {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
         {StepBufLen,StepBufLen,StepBufLen},
@@ -29,7 +29,7 @@ TStepMotor StepMotor[5]={
         GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_4,GPIOE,GPIO_Pin_8,
         TIM4,TIM_DMA_CC2,(1<<4),
         RCC_AHB1Periph_DMA1,DMA1_Stream3,DMA_Channel_2,
-        0,0,0,0,0,1,Bit_SET,
+        0,0,0,0,3,1,Bit_SET,
         {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
         {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
         {StepBufLen,StepBufLen,StepBufLen},
@@ -43,7 +43,7 @@ TStepMotor StepMotor[5]={
         GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_6,GPIOE,GPIO_Pin_9,
         TIM3,TIM_DMA_CC1,(1<<0),
         RCC_AHB1Periph_DMA1,DMA1_Stream4,DMA_Channel_5,
-        0,0,0,0,0,1,Bit_SET,
+        0,0,0,0,3,1,Bit_SET,
         {SteppAccelBuf[1],&SteppRun[1],SteppDecelBuf[1]},
         {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
         {StepBufLen,StepBufLen,StepBufLen},
@@ -57,7 +57,7 @@ TStepMotor StepMotor[5]={
         GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_2,GPIOE,GPIO_Pin_10,
         TIM3,TIM_DMA_CC2,(1<<4),
         RCC_AHB1Periph_DMA1,DMA1_Stream5,DMA_Channel_5,
-        0,0,0,0,0,1,Bit_SET,
+        0,0,0,0,3,1,Bit_SET,
         {SteppAccelBuf[1],&SteppRun[1],SteppDecelBuf[1]},
         {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
         {StepBufLen,StepBufLen,StepBufLen},
@@ -71,7 +71,7 @@ TStepMotor StepMotor[5]={
         GPIOD,GPIO_Pin_0,GPIOD,GPIO_Pin_1,GPIOD,GPIO_Pin_3,GPIOE,GPIO_Pin_7,
         TIM4,TIM_DMA_CC3,(1<<8),
         RCC_AHB1Periph_DMA1,DMA1_Stream7,DMA_Channel_2,
-        0,0,0,0,0,0,Bit_SET,
+        0,0,0,0,3,0,Bit_SET,
         {SteppAccelBuf[0],&SteppRun[0],SteppDecelBuf[0]},
         {DMA_MemoryInc_Enable,DMA_MemoryInc_Disable,DMA_MemoryInc_Enable},
         {StepBufLen,StepBufLen,StepBufLen},
@@ -142,16 +142,16 @@ void StepMotoInit(void)
 {
     StepGPIO_Init();
     SLP1=1;//SLP1=0;
-    EN1=0;//EN1=1;
-    DIR1=0;//DIR1=1;
-    //STP1=1;//STP1=0;
-    delay_us(2000);
-    SLP1=0;//SLP1=1;
-    delay_us(2000);
+//    EN1=0;//EN1=1;
+//    //DIR1=0;//DIR1=1;
+//    //STP1=1;//STP1=0;
+//    delay_us(2000);
+//    SLP1=0;//SLP1=1;
+//    delay_us(2000);
     EN1=1;//EN1=0;
     //while(1);
     delay_us(10000);
-    SLP1=1;//SLP1=0;
+//    SLP1=1;//SLP1=0;
 	DMA1_Init();
 	TIM4_PWM_Config();
     TIM3_PWM_Config();
@@ -339,24 +339,30 @@ void StepMotorHandler(u8 no)
     {
         case 0://模式0：加速，匀速，减速；
             if(StepMotor[no].stage==0) {
-                if(StepMotor[no].Size[1]>0)
-                {
+                if(StepMotor[no].Size[1]>0) {
                     StepMotor[no].stage=1;//匀速  0：加速，1：匀速，2：减速，3或其它：停止
+//printf("匀速\r\n");
                 } else {
                     StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
+//printf("减速1\r\n");
                 }
                 TIM_PWM_DMA_Config(no);
             } else if(StepMotor[no].stage==1) {
+//printf("减速2\r\n");
                 StepMotor[no].stage=2;//减速  0：加速，1：匀速，2：减速，3或其它：停止
                 TIM_PWM_DMA_Config(no);
             } else {
+//printf("结束\r\n");
                 StepMotor[no].stage=3;
                 DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
                 TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
                 (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
                 TIM_Cmd((StepMotor[no].timer),DISABLE);
 //SLP1=1;//SLP1=0;
-GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//所有电机不工作时才休眠
+if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
             }
             break;
         case 1://模式1：加速，匀速，忽略步数；
@@ -374,7 +380,10 @@ GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBit
                 (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
                 TIM_Cmd((StepMotor[no].timer),DISABLE);
 //SLP1=1;//SLP1=0;
-GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//所有电机不工作时才休眠
+if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
             }
             break;
         case 3://模式3：匀速，减速；
@@ -388,7 +397,10 @@ GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBit
                 (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
                 TIM_Cmd((StepMotor[no].timer),DISABLE);
 //SLP1=1;//SLP1=0;
-GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//所有电机不工作时才休眠
+if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
             }
             break;
         default:
@@ -397,13 +409,16 @@ GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBit
             (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
             TIM_Cmd((StepMotor[no].timer),DISABLE);
 //SLP1=1;//SLP1=0;
-GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//所有电机不工作时才休眠
+if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
             break;
     }
 }
 
 void DMA1_Stream0_IRQHandler(void)
-{	
+{
 	if(DMA_GetITStatus(DMA1_Stream0,DMA_IT_TCIF0)==SET)
     {
         DMA_ClearFlag(DMA1_Stream0,DMA_IT_TCIF0);
@@ -413,7 +428,7 @@ void DMA1_Stream0_IRQHandler(void)
 }
 
 void DMA1_Stream3_IRQHandler(void)
-{	
+{
 	if(DMA_GetITStatus(DMA1_Stream3,DMA_IT_TCIF3)==SET)
     {
 		DMA_ClearFlag(DMA1_Stream3,DMA_IT_TCIF3);

@@ -2,16 +2,16 @@
 #define __STEPMOTO_H__ 
 #include "sys.h"
 
-#define DIR1  PDout(5)  //横向运动
+//#define DIR1  PDout(5)  //横向运动
 #define STP1  PBout(6)
 #define SLP1  PDout(0)
 #define EN1   PDout(1)
 
-#define DIR2  PDout(4)  //上下运动
-#define DIR5  PDout(3)  //蠕动泵旋转方向
- 
-#define DIR3  PDout(6)  //注射器1
-#define DIR4  PDout(2)  //注射器2
+//#define DIR2  PDout(4)  //上下运动
+//#define DIR5  PDout(3)  //蠕动泵旋转方向
+// 
+//#define DIR3  PDout(6)  //注射器1
+//#define DIR4  PDout(2)  //注射器2
 
 #define StepBufLen     50
 //#define StepBufLen1     80
@@ -50,14 +50,8 @@ typedef struct
     DMA_Stream_TypeDef* DMA_Stream;  //DMA1_Stream0
     u32 DMA_Channel;                 //DMA_Channel_2
 
-//    u32 DMA_MBaseAddr;               //0加速地址，1匀速地址，2减速地址
-//    u32 DMA_MemoryInc[3];            //递增，不递增
-    
-//    u16 ADSize;                     //加减速数据长度
-//    u16 RSize;                      //匀速数据长度
-
-    u32 dist;                       //到起始位置距离
-    u8 pot;                         //0：起始位置；n：位置n。开机后到起始位置
+    u32 dist;                       //到原点(限位)位置距离
+    u8 pot;                         //0：原点(限位)位置；n：位置n。开机后到原点(限位)位置
     u8 level;                       //默认速度 0：慢，1：中，2：快
     u8 mode;                        //工作模式 模式0：加速，匀速，减速；模式1：加速，匀速，忽略步数；模式2：匀速，忽略加减速和步数；模式3：匀速，减速；
     u8 stage;                       //运行阶段 0：加速，1：匀速，2：减速，3或其它：停止
@@ -69,8 +63,6 @@ typedef struct
     u16 Size[3];                    //加速匀速减速数据长度
 
     TSetStepMotor SetStepMotor[3];
-    
-
 
 }TStepMotor;
 
@@ -80,5 +72,7 @@ u16 get_c1(void);
 void StepMoto1Move(s32 step);
 u32 StepMotoCal(u16 c0,u16 c1,u16 a);
 u32 StepMotoMove(u8 no,u8 mode,s32 steps,u8 level);
+
+extern TStepMotor StepMotor[5];
 
 #endif

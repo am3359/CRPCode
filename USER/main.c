@@ -158,7 +158,6 @@ int main(void)
     UART1_Init(115200);                            //串口1初始化波特率为115200，用于串口通讯
     USART3_Init(115200);                           //串口3初始化波特率为115200，用于HMI 通讯
     
-    //TIM3_PWM_Init();                               //产生LED脉冲信号1120Hz
     TIM2_PWM_Init();                               //产生LED脉冲信号1120Hz PB11
     AD7799_Init(ADC_CON_GAIN1);                    //初始化AD7799,包含SPI2初始化//??频率选择，时序等..
     
@@ -171,8 +170,6 @@ int main(void)
     
     My_RTC_Init();                                 //设置RTC
     delay_us(2000000);                             //??为了仿真时延时，正式时删除
-
-//StepMotoMove(0,0,-600,get_c1());
 
     fres=f_mount(&fs,"0:",1);                      //立即挂载FLASH.
     if(fres == FR_NO_FILESYSTEM) {                 //FLASH磁盘,FAT文件系统错误,重新格式化FLASH
@@ -576,11 +573,18 @@ void com_task(void *pvParameters)
                                         printf("步进电机控制命令:%s\r\n",buffer);
                                         num=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
                                     
-                                        steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
-                                        if((buffer[c[i][0]+3]-'0') >= 4) steps=-steps;
-
                                         if(num) {//??当num=5时，就是蠕动泵
-                                            StepMotoMove(num-1,0,steps,2);
+                                            steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
+                                            
+                                            bits = buffer[c[i][0]+3]-'0';
+                                            if(( bits== 3) || ( bits >= 7)) {//3,7~255
+                                                bits =0;
+                                            } else if( bits >= 4)  {//4,5,6
+                                                steps=-steps;
+                                                bits -= 4;
+                                            }//0,1,2
+                                            
+                                            StepMotoMove(num-1,0,steps,bits);
                                         }
                                         
                                         motion_state1.motion_type=0;//无运动 
@@ -601,10 +605,19 @@ void com_task(void *pvParameters)
                                         
                                         printf("蠕动泵控制命令:%s\r\n",buffer);
                                         num=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
+                                        
                                         if(num==1) {
                                             steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
-                                            if((buffer[c[i][0]+3]-'0') >= 4) steps=-steps;
-                                            StepMotoMove(4,0,steps,2);
+                                            
+                                            bits = buffer[c[i][0]+3]-'0';
+                                            if(( bits== 3) || ( bits >= 7)) {//3,7~255
+                                                bits =0;
+                                            } else if( bits >= 4)  {//4,5,6
+                                                steps=-steps;
+                                                bits -= 4;
+                                            }//0,1,2
+                                            
+                                            StepMotoMove(4,0,steps,bits);
                                         }
                                         
                                         motion_state1.motion_type=0;//无运动 
@@ -776,24 +789,23 @@ void motion_task(void *pvParameters)
                             printf("步进电机控制命令:%s\r\n",buffer);
                             num=(buffer[1]-'0')*10+buffer[2]-'0';
                         
-                            steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
-                            if((buffer[3]-'0') >= 4) steps=-steps;
-                            //StepMoto1Move(steps);
+                            if((num>=1) && (num<=5)){//??当num=5时，就是蠕动泵
 
-                            if(num) {//??当num=5时，就是蠕动泵
-                                
-                                sum=StepMotoMove(num-1,0,steps,2);
-                                
-                                if(steps>0)
-                                {
-                                    //printf("now sum:%d\r\n",sum*2+steps*c1);
-                                    vTaskDelay(pdMS_TO_TICKS((sum*2+steps*c1)/1000));
-                                }
-                                else {
-                                    //printf("now sum:%d\r\n",sum*2-steps*c1);
-                                    vTaskDelay(pdMS_TO_TICKS((sum*2-steps*c1)/1000));
-                                }
+                                steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
 
+                                bits = buffer[3]-'0';
+                                if(( bits== 3) || ( bits >= 7)) {//3,7~255
+                                    bits =0;
+                                } else if( bits >= 4)  {//4,5,6
+                                    steps=-steps;
+                                    bits -= 4;
+                                }//0,1,2
+                                
+                                sum=StepMotoMove(num-1,0,steps,bits);
+                                
+
+                                vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[num-1].Size[1]*(*StepMotor[num-1].Buf[1]))/1000));
+//printf("sum:%d;steps:%d;c1:%d;time:%d\r\n",sum,StepMotor[num-1].Size[1],*StepMotor[num-1].Buf[1],(sum*2+StepMotor[num-1].Size[1]*(*StepMotor[num-1].Buf[1]))/1000);
                             }
 
                             break;
@@ -804,18 +816,19 @@ void motion_task(void *pvParameters)
                             num=(buffer[1]-'0')*10+buffer[2]-'0';
                             if(num==1) {
 
-                                    steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
-                                    if((buffer[3]-'0') >= 4) steps=-steps;
-                                    sum=StepMotoMove(4,0,steps,2);
-                                    if(steps>0)
-                                    {
-                                        //printf("now sum:%d\r\n",sum*2+steps*c1);
-                                        vTaskDelay(pdMS_TO_TICKS((sum*2+steps*c1)/1000));
-                                    }
-                                    else {
-                                        //printf("now sum:%d\r\n",sum*2-steps*c1);
-                                        vTaskDelay(pdMS_TO_TICKS((sum*2-steps*c1)/1000));
-                                    }
+                                steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
+                                
+                                bits = buffer[3]-'0';
+                                if(( bits== 3) || ( bits >= 7)) {//3,7~255
+                                    bits =0;
+                                } else if( bits >= 4)  {//4,5,6
+                                    steps=-steps;
+                                    bits -= 4;
+                                }//0,1,2
+                                
+                                sum=StepMotoMove(4,0,steps,bits);
+                                
+                                vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[4].Size[1]*(*StepMotor[4].Buf[1]))/1000));
 
                             }
                             break;

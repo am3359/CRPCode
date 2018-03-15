@@ -21,6 +21,6 @@ void TIM2_PWM_Init(void);
 void TIM4_PWM_Config(void);
 void TIM3_PWM_Config(void);
 
-extern volatile unsigned long long FreeRTOSRunTimeTicks;
-void ConfigureTimeForRunTimeStats(void);
+//extern volatile unsigned long long FreeRTOSRunTimeTicks;
+//void ConfigureTimeForRunTimeStats(void);
 #endif
