@@ -6,14 +6,6 @@
 //#include "beep.h"
 #include "stepmoto.h"
 
-void PWM_OFF(u8 no)
-{
-    DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-    TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
-    (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
-    TIM_Cmd((StepMotor[no].timer),DISABLE);
-}
-
 //外部中断5~9服务程序
 void EXTI9_5_IRQHandler(void)
 {
@@ -22,6 +14,7 @@ void EXTI9_5_IRQHandler(void)
         
         if(!GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_5)) {
             PWM_OFF(0);
+            IsLmt(0);//设置原点标志
 //PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line7);    // Clear the EXTI line 7 pending bit  
@@ -30,6 +23,7 @@ void EXTI9_5_IRQHandler(void)
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_4)) {
             PWM_OFF(1);
+            IsLmt(1);//设置原点标志
 //PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line8);    // Clear the EXTI line 8 pending bit  
@@ -38,6 +32,7 @@ void EXTI9_5_IRQHandler(void)
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_6)) {
             PWM_OFF(2);
+            IsLmt(2);//设置原点标志
 //PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line9);    // Clear the EXTI line 9 pending bit  
@@ -50,6 +45,7 @@ void EXTI15_10_IRQHandler(void)
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_2)) {
             PWM_OFF(3);
+            IsLmt(3);//设置原点标志
 //PDout(0)=1;
         }
         EXTI_ClearITPendingBit(EXTI_Line10);    // Clear the EXTI line 10 pending bit  

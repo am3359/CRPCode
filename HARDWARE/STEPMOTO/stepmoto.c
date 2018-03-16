@@ -219,6 +219,28 @@ u32 StepMotoCal(u16 c0,u16 c1,u16 a)
 //    StepMotor[no].ADSize=StepBufLen-j*2;
 //}
 
+void PWM_OFF(u8 no)
+{
+    DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+    TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
+    (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
+    TIM_Cmd((StepMotor[no].timer),DISABLE);
+}
+
+u8 IsLmt(u8 no)
+{
+    u8 res=0;
+
+    if(GPIO_ReadInputDataBit(StepMotor[no].Lmt_GPIO, StepMotor[no].Lmt_GPIO_Pin)==Bit_RESET) {//限位信号为低代表在原点
+        StepMotor[no].dist = 0;
+        StepMotor[no].pot = 0;
+        res=1;
+    } else {
+        res=0;
+    }
+                
+    return res;
+}
 
 /************************************************************************************
 函数名称：步进电机1控制函数
@@ -250,13 +272,11 @@ u32 StepMotoMove(u8 no,u8 mode,s32 steps,u8 level)//??载入S曲线时可以修�
         GPIO_ResetBits(StepMotor[no].Dir_GPIO, StepMotor[no].Dir_GPIO_Pin);//GPIO_SetBits
         //steps =steps;
     }
-    
+
 //如果向限位运动并且已经在限位
-if(StepMotor[no].LmtEn)
-{
-    if(GPIO_ReadOutputDataBit (StepMotor[no].Dir_GPIO,StepMotor[no].Dir_GPIO_Pin)==StepMotor[no].LmtBit) {
-        if(GPIO_ReadInputDataBit(StepMotor[no].Lmt_GPIO, StepMotor[no].Lmt_GPIO_Pin)==Bit_RESET)
-            return sum;
+if(StepMotor[no].LmtEn) {//有限位要求
+    if(GPIO_ReadOutputDataBit (StepMotor[no].Dir_GPIO,StepMotor[no].Dir_GPIO_Pin)==StepMotor[no].LmtBit) {//方向确认
+        if(IsLmt(no)) return 0;
     }
 }
    
@@ -354,10 +374,7 @@ void StepMotorHandler(u8 no)
             } else {
 //printf("结束\r\n");
                 StepMotor[no].stage=3;
-                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
-                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
-                TIM_Cmd((StepMotor[no].timer),DISABLE);
+                PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
 if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
@@ -375,10 +392,7 @@ if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
                 TIM_PWM_DMA_Config(no);
             } else {
                 StepMotor[no].stage=3;
-                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
-                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
-                TIM_Cmd((StepMotor[no].timer),DISABLE);
+                PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
 if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
@@ -392,10 +406,7 @@ if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
                 TIM_PWM_DMA_Config(no);
             } else {
                 StepMotor[no].stage=3;
-                DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-                TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
-                (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
-                TIM_Cmd((StepMotor[no].timer),DISABLE);
+                PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
 if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
@@ -404,10 +415,7 @@ if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
             }
             break;
         default:
-            DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-            TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
-            (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
-            TIM_Cmd((StepMotor[no].timer),DISABLE);
+            PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
 if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)

@@ -64,13 +64,15 @@ typedef struct
 
     TSetStepMotor SetStepMotor[3];
 
-}TStepMotor;
+}TStepMotor;//??dist,pot在开机后不一定与实际位置相符，需要主动移到原点位
 
 
 void StepMotoInit(void);
 u16 get_c1(void);
 void StepMoto1Move(s32 step);
 u32 StepMotoCal(u16 c0,u16 c1,u16 a);
+void PWM_OFF(u8 no);
+u8 IsLmt(u8 no);
 u32 StepMotoMove(u8 no,u8 mode,s32 steps,u8 level);
 
 extern TStepMotor StepMotor[5];
