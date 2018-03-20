@@ -73,6 +73,7 @@ void StepMoto1Move(s32 step);
 u32 StepMotoCal(u16 c0,u16 c1,u16 a);
 void PWM_OFF(u8 no);
 u8 IsLmt(u8 no);
+void AllSleep(void);
 u32 StepMotoMove(u8 no,u8 mode,s32 steps,u8 level);
 
 extern TStepMotor StepMotor[5];

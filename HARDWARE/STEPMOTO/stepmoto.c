@@ -221,10 +221,10 @@ u32 StepMotoCal(u16 c0,u16 c1,u16 a)
 
 void PWM_OFF(u8 no)
 {
-    DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
-    TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
     (StepMotor[no].timer) -> CCER &= ~StepMotor[no].CCER; //关闭TIM PWM输出
     TIM_Cmd((StepMotor[no].timer),DISABLE);
+    DMA_Cmd(StepMotor[no].DMA_Stream,DISABLE);
+    TIM_DMACmd(StepMotor[no].timer,StepMotor[no].TIM_DMASource,DISABLE);
 }
 
 u8 IsLmt(u8 no)
@@ -353,6 +353,14 @@ GPIO_ResetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_SetBit
     return sum;
 }
 
+void AllSleep(void)
+{
+    //所有电机不工作时才休眠
+if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+    PDout(0)=1;//GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+}
+
 void StepMotorHandler(u8 no)
 {
     switch(StepMotor[0].mode)
@@ -377,9 +385,10 @@ void StepMotorHandler(u8 no)
                 PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
-if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
-     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
-    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+//     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+//    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+    AllSleep();
             }
             break;
         case 1://模式1：加速，匀速，忽略步数；
@@ -395,9 +404,10 @@ if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
                 PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
-if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
-     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
-    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+//     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+//    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+    AllSleep();
             }
             break;
         case 3://模式3：匀速，减速；
@@ -409,18 +419,20 @@ if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
                 PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
-if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
-     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
-    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+//     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+//    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+    AllSleep();
             }
             break;
         default:
             PWM_OFF(no);
 //SLP1=1;//SLP1=0;
 //所有电机不工作时才休眠
-if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
-     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
-    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+//if((StepMotor[0].stage>2) && (StepMotor[1].stage>2) && (StepMotor[2].stage>2)
+//     && (StepMotor[3].stage>2) && (StepMotor[4].stage>2))
+//    GPIO_SetBits(StepMotor[no].Slp_GPIO, StepMotor[no].Slp_GPIO_Pin);//GPIO_ResetBits//休眠
+    AllSleep();
             break;
     }
 }

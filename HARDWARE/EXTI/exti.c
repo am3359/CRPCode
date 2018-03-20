@@ -13,27 +13,36 @@ void EXTI9_5_IRQHandler(void)
     if(EXTI_GetITStatus(EXTI_Line7) != RESET) {
         
         if(!GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_5)) {
-            PWM_OFF(0);
-            IsLmt(0);//设置原点标志
 //PDout(0)=1;
+            StepMotor[0].stage=3;//遇到限位状态变为停止
+    AllSleep();//公用SLP时，所有电机不工作时才休眠
+            PWM_OFF(0);
+            IsLmt(0);//设置原点(限位)标志
+
         }
         EXTI_ClearITPendingBit(EXTI_Line7);    // Clear the EXTI line 7 pending bit  
     }
     if(EXTI_GetITStatus(EXTI_Line8) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_4)) {
-            PWM_OFF(1);
-            IsLmt(1);//设置原点标志
 //PDout(0)=1;
+            StepMotor[1].stage=3;//遇到限位状态变为停止
+    AllSleep();//公用SLP时，所有电机不工作时才休眠
+            PWM_OFF(1);
+            IsLmt(1);//设置原点(限位)标志
+
         }
         EXTI_ClearITPendingBit(EXTI_Line8);    // Clear the EXTI line 8 pending bit  
     }
     if(EXTI_GetITStatus(EXTI_Line9) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_6)) {
-            PWM_OFF(2);
-            IsLmt(2);//设置原点标志
 //PDout(0)=1;
+            StepMotor[2].stage=3;//遇到限位状态变为停止
+    AllSleep();//公用SLP时，所有电机不工作时才休眠
+            PWM_OFF(2);
+            IsLmt(2);//设置原点(限位)标志
+
         }
         EXTI_ClearITPendingBit(EXTI_Line9);    // Clear the EXTI line 9 pending bit  
     }
@@ -44,9 +53,12 @@ void EXTI15_10_IRQHandler(void)
     if(EXTI_GetITStatus(EXTI_Line10) != RESET) {
         
         if(GPIO_ReadOutputDataBit (GPIOD,GPIO_Pin_2)) {
-            PWM_OFF(3);
-            IsLmt(3);//设置原点标志
 //PDout(0)=1;
+            StepMotor[3].stage=3;//遇到限位状态变为停止
+    AllSleep();//公用SLP时，所有电机不工作时才休眠
+            PWM_OFF(3);
+            IsLmt(3);//设置原点(限位)标志
+
         }
         EXTI_ClearITPendingBit(EXTI_Line10);    // Clear the EXTI line 10 pending bit  
     }

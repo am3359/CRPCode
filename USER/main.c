@@ -85,14 +85,14 @@ void start_task(void *pvParameters);
 
 //??HMI需要重写，不是以页面为状态，是以收到的命令为状态
 #define HMI_OTHER      0
-#define HMI_START      1
-#define HMI_CHECK      2
-#define HMI_ANALY      3
-#define HMI_QUERY      4
-#define HMI_QC         5
-#define HMI_SET        6
-#define HMI_SYS        7
-#define HMI_OFF        8
+#define HMI_INIT       1
+#define HMI_CMD        2
+//#define HMI_ANALY      3
+//#define HMI_QUERY      4
+//#define HMI_QC         5
+//#define HMI_SET        6
+//#define HMI_SYS        7
+//#define HMI_OFF        8
 
 #define COM_Q_NUM      4                           //发送数据的消息队列的数量 
 #define HMI_Q_NUM     16                           //发送数据的消息队列的数量 
@@ -127,6 +127,7 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
 u8 getDir(u8 * buf1,u8 * buf2,u8 pos);
+void MotionReset(void);
 
 FATFS fs;
 FIL file;                                          //文件
@@ -162,6 +163,8 @@ int main(void)
     AD7799_Init(ADC_CON_GAIN1);                    //初始化AD7799,包含SPI2初始化//??频率选择，时序等..
     
     HC595Init();                                   //??检查时序是否可靠，变化时是否进入临界区
+    SwitchOut(0);
+    motion_state1.valve_flag=0;
     StepMotoInit();                                //??检查时序是否可靠，变化时是否进入临界区
 //StepMotoCal(1100,392,50);
 //StepMotoCal(2000,1000,50);
@@ -208,7 +211,7 @@ void start_task(void *pvParameters)
     Com_Queue=xQueueCreate(COM_Q_NUM,COM_REC_LEN); //创建消息Com_Queue，接收串口命令，命令数4，命令长度63
     Hmi_Queue=xQueueCreate(HMI_Q_NUM,HMI_REC_LEN); //创建消息Hmi_Queue，接收HMI 命令，命令数16，命令长度15
     
-    Motion_Queue=xQueueCreate(MOTION_Q_NUM,CMD_LEN);   //创建消息Valve_Queue，接收步进电机命令，命令数16，命令长度12
+    Motion_Queue=xQueueCreate(MOTION_Q_NUM,CMD_LEN);   //创建消息Motion_Queue，接收步进电机命令，命令数16，命令长度12
     //Valve_Queue=xQueueCreate(VALVE_Q_NUM,CMD_LEN); //创建消息Valve_Queue，接收阀命令，命令数16，命令长度12
     //Step_Queue=xQueueCreate(STEP_Q_NUM,CMD_LEN);   //创建消息Valve_Queue，接收步进电机命令，命令数16，命令长度12
     //Pump_Queue=xQueueCreate(PUMP_Q_NUM,CMD_LEN); //创建消息Valve_Queue
@@ -263,8 +266,7 @@ void start_task(void *pvParameters)
     taskEXIT_CRITICAL();                           //退出临界区
 }
 
-u32 sum;
-u16 c0,c1,a;
+
 void com_task(void *pvParameters)
 {//uart1通讯
     u8 tbuf[64];                                   //??__align(4)  //??注意tbuf的大小要能放得下最深的文件名绝对路径
@@ -287,7 +289,8 @@ void com_task(void *pvParameters)
     
     
     u8 bits;
-    //u16 c0,c1,a;
+
+    u16 c0,c1,a;
     s32 steps;
     
     while(1) {
@@ -574,6 +577,7 @@ void com_task(void *pvParameters)
                                         num=(buffer[c[i][0]+1]-'0')*10+buffer[c[i][0]+2]-'0';
                                     
                                         if(num) {//??当num=5时，就是蠕动泵
+                                            motion_state1.step_flag |= (1<<(num-1));
                                             steps = (buffer[c[i][0]+4]-'0')*1000+(buffer[c[i][0]+5]-'0')*100+(buffer[c[i][0]+6]-'0')*10+buffer[c[i][0]+7]-'0';
                                             
                                             bits = buffer[c[i][0]+3]-'0';
@@ -661,8 +665,7 @@ void com_task(void *pvParameters)
                                     c1=(buffer[c[i][0]+5]-'0')*1000+(buffer[c[i][0]+6]-'0')*100+(buffer[c[i][0]+7]-'0')*10+(buffer[c[i][0]+8]-'0');
                                     a=(buffer[c[i][0]+9]-'0')*1000+(buffer[c[i][0]+10]-'0')*100+(buffer[c[i][0]+11]-'0')*10+(buffer[c[i][0]+12]-'0');
                                     printf("c0:%d,c1:%d,a:%d,\r\n", c0,c1,a); 
-                                    sum=StepMotoCal(c0,c1,a);
-
+                                    StepMotoCal(c0,c1,a);
                                 }
                                 break;
                             default:
@@ -747,25 +750,28 @@ void motion_task(void *pvParameters)
     u8 bits;
     //u32 valve_state;
     s32 steps;
+    u32 sum;
     u8 num;
     //??有一个初始状态，把所有值归零，所有步进电机到起始位置
     while(1) {
-        if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
-            //运动模块互斥访问
-            
-
-            if(Motion_Queue!=NULL) {
-                memset(buffer,0,CMD_LEN);    //清除缓冲区
-
-                err=xQueueReceive(Motion_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
-                if(err == pdTRUE) {
+        if(Motion_Queue!=NULL) {
+            memset(buffer,0,CMD_LEN);    //清除缓冲区
+            err=xQueueReceive(Motion_Queue,buffer,10);//采用非阻塞式  portMAX_DELAY
+            if(err == pdTRUE) {
+                if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                //运动模块互斥访问
+                
                     switch(buffer[0]){
                         case 'A'://复位命令
                             motion_state1.motion_type=2;//阻塞运动()
                             motion_state1.current_motion='A';
                             printf("复位命令:%s\r\n",buffer);
                             //所有步进电机到起始位置，所有阀断电，柱塞泵要和阀配合，并加入必要的延时
+                            MotionReset();
                         
+     //for(num=0;num<5;num++) printf("StepMotor[%d].stage=%d\r\n",num,StepMotor[num].stage);
+     //for(num=0;num<5;num++) printf("StepMotor[%d].pot=%d\r\n",num,StepMotor[num].pot);
+     //for(num=0;num<5;num++) printf("StepMotor[%d].dist=%d\r\n",num,StepMotor[num].dist);
                         
                             break;
                         case 'V'://执行阀控制命令
@@ -790,7 +796,7 @@ void motion_task(void *pvParameters)
                             num=(buffer[1]-'0')*10+buffer[2]-'0';
                         
                             if((num>=1) && (num<=5)){//??当num=5时，就是蠕动泵
-
+                                motion_state1.step_flag |= (1<<(num-1));
                                 steps = (buffer[4]-'0')*1000+(buffer[5]-'0')*100+(buffer[6]-'0')*10+buffer[7]-'0';
 
                                 bits = buffer[3]-'0';
@@ -858,14 +864,13 @@ void motion_task(void *pvParameters)
                             printf("延时结束\r\n");
                             break;
                     }
-                }
-                motion_state1.motion_type=0;//无运动 
-                motion_state1.current_motion=0;//无运动目标
+                    
+                    motion_state1.motion_type=0;//无运动 
+                    motion_state1.current_motion=0;//无运动目标
+                    xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                } else printf("motion_task没有获得互斥信号量\r\n");
             }
-            
-            
-            xSemaphoreGive( MutexSemMotion );//释放互斥信号量
-        } else printf("motion_task没有获得互斥信号量\r\n");
+        }
     }
 }
 
@@ -875,9 +880,8 @@ void hmi_task(void *pvParameters)
     u8 buffer[HMI_REC_LEN];
     BaseType_t res;
     u8 year,month,date,week;
-    u8 hour,min,sec,start_cnt;//time_valid;//,ampm;
-    
-//    u8 command[12];
+    u8 hour,min,sec,i;//time_valid;//,ampm;
+    //u32 sum;
     
     u32 PreviousState = HMI_OTHER;
     u32 CurrentState  = HMI_OTHER;
@@ -894,27 +898,19 @@ void hmi_task(void *pvParameters)
         }
         
         switch(CurrentState) {
-            case HMI_START:
+            case HMI_INIT://完成电机，阀，泵的复位和初始化，读取 ，光电信号（光隔和红光）测试
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page start", sizeof("page start")-1);//Uart3_HMICmd("cls RED", sizeof("cls RED")-1);//刷屏
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100  //??打印pdMS_TO_TICKS看看是不是实际值
-//                    memcpy(command,"1021", 4);
-//                    command[4]='\0';
-//                    xQueueSend(Valve_Queue,command,10);//向Valve_Queue队列中发送数据
-//                    memcpy(command,"10140400", 8);
-//                    command[8]='\0';
-//                    xQueueSend(Step_Queue,command,10);//向Valve_Queue队列中发送数据
-                    start_cnt=0;
-                    //time_valid=0;
+                    vTaskDelay(pdMS_TO_TICKS(100));//??至少保证100  //??打印pdMS_TO_TICKS看看是不是实际值
+                    i=0;
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    //需要完成：从HMI读取当前时间赋值给RTC，步进电机运动，光电信号（光隔和红光）测试，阀，泵等检测
+                    //需要完成：从HMI读取当前时间赋值给RTC
                     //1：从HMI读取当前时间赋值给RTC
-                    if(start_cnt == 0){
-                        //Uart3_HMICmd("get rtc0", sizeof("get rtc0")-1);
+                    if(i == 0){
+
                         Uart3_PutString("\x5A\xA5\x03\x81\x20\x07", 6);//5A A5 03 81 20 07 读取RTC
                         memset(buffer,0,HMI_REC_LEN);
-                        start_cnt++;
-                    } else if(start_cnt < 10){
+                        i++;
+                    } else if(i < 10){
                         if((res == pdTRUE) && (buffer[1] == 0x20)){//收到有效数据
                             
                             year  = ((buffer[3] >> 4 ) & 0x0f)* 10 + (buffer[3] & 0x0f);
@@ -931,248 +927,105 @@ void hmi_task(void *pvParameters)
                             //CorrectDate(year,&month,&date);
                             //CorrectTime(&hour,&min,&sec);
                             //week=RTC_Get_Week(2000 + year,month,date);
-//                            if(hour < 12)//?? 
-//                                RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
-//                            else
-//                                RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
-//                            RTC_Set_Date(year,month,date,week);    //设置日期
-                            //time_valid = 1;
+                            if(hour < 12)//?? 
+                                RTC_Set_Time(hour,min,sec,RTC_H12_AM);    //设置时间
+                            else
+                                RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
+                            RTC_Set_Date(year,month,date,week);    //设置日期
+
                             //start_cnt=10;
-                            NextState = HMI_CHECK;
+                            NextState = HMI_CMD;
                         } else {//无数据
-                            start_cnt++;
+                            i++;
                         }
                     } else {
                         //显示读取时间失败
                         printf("\r\n没有读到时间\r\n");
 
-                        NextState = HMI_CHECK;
+                        NextState = HMI_CMD;
                     }
                     vTaskDelay(pdMS_TO_TICKS(20));//至少保证20 的HMI反馈时间
                     //printf("start_cnt:%d\r\n",start_cnt);
                 STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                    //运动模块互斥访问
+                                        
+                        motion_state1.motion_type=2;//阻塞运动
+                        motion_state1.current_motion='A';
+                                        
+                        MotionReset();
+     //for(i=0;i<5;i++) printf("StepMotor[%d].stage=%d\r\n",i,StepMotor[i].stage);
+     //for(i=0;i<5;i++) printf("StepMotor[%d].pot=%d\r\n",i,StepMotor[i].pot);
+     //for(i=0;i<5;i++) printf("StepMotor[%d].dist=%d\r\n",i,StepMotor[i].dist);
+                        motion_state1.motion_type=0;//无运动 
+                        motion_state1.current_motion=0;//无运动目标
+                        
+                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                    } else printf("com_task[V]没有获得互斥信号量\r\n");
+
                     vTaskDelay(pdMS_TO_TICKS(2000));//至少保证10
                 STATE_END                                                       //} break;
-            case HMI_CHECK:
+            case HMI_CMD:
                 STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page check", sizeof("page check")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
+
                 STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    //需要完成：清洗等
-                    
-                    NextState = HMI_ANALY;
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-                    vTaskDelay(pdMS_TO_TICKS(2000));//至少保证10
-                STATE_END                                                       //} break;
-           case HMI_ANALY:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x02) {
-                            switch(buffer[2]) {
-                                case 0x03:
-                                    NextState = HMI_QUERY;
-                                    break;
-                                case 0x04:
-                                    NextState = HMI_QC;
-                                    break;
-                                case 0x05:
-                                    NextState = HMI_SET;
-                                    break;
-                                case 0x06:
-                                    NextState = HMI_SYS;
-                                    break;
-                                case 0x07:
-                                    NextState = HMI_OFF;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page analyse_0", sizeof("page analyse_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
+
                 STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
 
                 STATE_END                                                       //} break;
-           case HMI_QUERY:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x03 ) {
-                            switch(buffer[2]) {
-                                case 0x0B:
-                                    NextState = HMI_ANALY;
-                                    break;
-                                case 0x0C:
-                                    NextState = HMI_QC;
-                                    break;
-                                case 0x0D:
-                                    NextState = HMI_SET;
-                                    break;
-                                case 0x0E:
-                                    NextState = HMI_SYS;
-                                    break;
-                                case 0x0F:
-                                    NextState = HMI_OFF;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page query_0", sizeof("page query_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+//           case HMI_ANALY:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
 
-                STATE_END                                                       //} break;
-           case HMI_QC:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x04 ) {
-                            switch(buffer[2]) {
-                                case 0x07:
-                                    NextState = HMI_ANALY;
-                                    break;
-                                case 0x08:
-                                    NextState = HMI_QUERY;
-                                    break;
-                                case 0x09:
-                                    NextState = HMI_SET;
-                                    break;
-                                case 0x0A:
-                                    NextState = HMI_SYS;
-                                    break;
-                                case 0x0B:
-                                    NextState = HMI_OFF;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page qc_0", sizeof("page qc_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
 
-                STATE_END                                                       //} break;
-           case HMI_SET:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x05 ) {
-                            switch(buffer[2]) {
-                                case 0x01:
-                                    NextState = HMI_ANALY;
-                                    break;
-                                case 0x02:
-                                    NextState = HMI_QUERY;
-                                    break;
-                                case 0x03:
-                                    NextState = HMI_QC;
-                                    break;
-                                case 0x04:
-                                    NextState = HMI_SYS;
-                                    break;
-                                case 0x05:
-                                    NextState = HMI_OFF;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page set_0", sizeof("page set_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
 
-                STATE_END                                                       //} break;
-           case HMI_SYS:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x06 ) {
-                            switch(buffer[2]) {
-                                case 0x07:
-                                    NextState = HMI_ANALY;
-                                    break;
-                                case 0x08:
-                                    NextState = HMI_QUERY;
-                                    break;
-                                case 0x09:
-                                    NextState = HMI_QC;
-                                    break;
-                                case 0x0A:
-                                    NextState = HMI_SET;
-                                    break;
-                                case 0x0B:
-                                    NextState = HMI_OFF;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page system_0", sizeof("page system_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+//                STATE_END                                                       //} break;
+//           case HMI_QUERY:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
 
-                STATE_END                                                       //} break;
-           case HMI_OFF:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    //Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
-                    vTaskDelay(pdMS_TO_TICKS(100));//至少保证100
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    if(buffer[0]==0x65) {
-                        if(buffer[1]==0x07 ) {
-                            switch(buffer[2]) {
-                                case 0x02:
-                                    NextState = HMI_ANALY;
-                                    break;
-                                case 0x03:
-                                    NextState = HMI_QUERY;
-                                    break;
-                                case 0x04:
-                                    NextState = HMI_QC;
-                                    break;
-                                case 0x05:
-                                    NextState = HMI_SET;
-                                    break;
-                                case 0x06:
-                                    NextState = HMI_SYS;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } else {
-                            //Uart3_HMICmd("page poweroff_0", sizeof("page poweroff_0")-1);
-                            NextState = HMI_ANALY;
-                        }
-                    }
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
 
-                STATE_END                                                       //} break;
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
+//           case HMI_QC:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
+//           case HMI_SET:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
+//           case HMI_SYS:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
+//           case HMI_OFF:
+//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
+
+//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
+
+//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
+
+//                STATE_END                                                       //} break;
            case HMI_OTHER:
            default:
                 vTaskDelay(pdMS_TO_TICKS(2000));//??
-                CurrentState = HMI_START;
-                NextState    = HMI_START;
+                CurrentState = HMI_INIT;
+                NextState    = HMI_INIT;
                 
                 break;
         }
@@ -1378,4 +1231,50 @@ u8 exf_getfree(u8 *drv,u32 *total,u32 *free)
 //	GPIO_SetBits(GPIOC,GPIO_Pin_6 | GPIO_Pin_7);//GPIOC6,F7设置高
 
 //}
+void MotionReset(void)
+{
+    u32 sum,i;
+                        printf("打开阀#5\r\n");//为了使注射器2推挤有通路
+                        motion_state1.valve_flag |= 1<<(5-1);
+                        printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+                        SwitchOut(motion_state1.valve_flag);
+                                        
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        motion_state1.current_motion='S';
+                        
+                        for(i=0;i<5;i++) {
+                            StepMotor[i].stage=3;//所有电机运动状态为3停止
+                        }
+                        
+                        motion_state1.step_flag = (1<<0);
+                        sum=StepMotoMove(0,0,1600,0);//??到限位位置4000步够吗
+                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[0].Size[1]*(*StepMotor[0].Buf[1]))/1000));
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        if (IsLmt(0)==0) printf("步进电机0故障\r\n");
+                        
+                        motion_state1.step_flag = (1<<1);
+                        sum=StepMotoMove(1,0,-2400,0);//??到限位位置4000步够吗
+                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[1].Size[1]*(*StepMotor[1].Buf[1]))/1000));
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        if (IsLmt(1)==0) printf("步进电机1故障\r\n");
+                        
+                        motion_state1.step_flag = (1<<2);
+                        sum=StepMotoMove(2,0,-2400,0);//??到限位位置4000步够吗
+                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[2].Size[1]*(*StepMotor[2].Buf[1]))/1000));
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        if (IsLmt(2)==0) printf("步进电机2故障\r\n");
+                        
+                        motion_state1.step_flag = (1<<3);
+                        sum=StepMotoMove(3,0,-2400,0);//??到限位位置4000步够吗
+                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[3].Size[1]*(*StepMotor[3].Buf[1]))/1000));
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        if (IsLmt(3)==0) printf("步进电机3故障\r\n");
+                        
+                        vTaskDelay(pdMS_TO_TICKS(200));
 
+                        printf("关闭所有阀\r\n");
+                        motion_state1.valve_flag=0;
+                        printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+                        SwitchOut(motion_state1.valve_flag);
+}
