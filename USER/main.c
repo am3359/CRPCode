@@ -86,13 +86,25 @@ void start_task(void *pvParameters);
 //??HMI需要重写，不是以页面为状态，是以收到的命令为状态
 #define HMI_OTHER      0
 #define HMI_INIT       1
-#define HMI_CMD        2
-//#define HMI_ANALY      3
-//#define HMI_QUERY      4
-//#define HMI_QC         5
-//#define HMI_SET        6
-//#define HMI_SYS        7
-//#define HMI_OFF        8
+#define HMI_CHECK      2
+#define HMI_TEST       3
+#define HMI_QUERY      4
+#define HMI_QC         5
+#define HMI_SET        6
+#define HMI_SYS        7
+#define HMI_OFF        8
+
+#define READ_RES         0X81
+#define RTC_NOW          0x20
+
+#define READ_MEM         0x83
+#define MENU1            0x0160
+#define MENU1_ANALY      0x2930
+#define MENU1_QUERY      0x2131
+#define MENU1_QC         0x4032
+#define MENU1_SET        0x2333
+#define MENU1_SYS        0x2434
+#define MENU1_OFF        0x2535
 
 #define COM_Q_NUM      4                           //发送数据的消息队列的数量 
 #define HMI_Q_NUM     16                           //发送数据的消息队列的数量 
@@ -105,6 +117,15 @@ void start_task(void *pvParameters);
 //#define STEP_Q_NUM    16                           //发送步进电机控制命令的消息队列的数量 
 //#define PUMP_Q_NUM     8                           //发送泵控制命令的消息队列的数量 
 
+#define ReadRTCLen 6
+#define ToPageNLen 7
+char ReadRTC[8]={0x5A,0xA5,0x03,0x81,0x20,0x07,0x00,0x00};
+char ToPageN[8]={0x5A,0xA5,0x04,0x80,0x03,0x00,0x01,0x00};
+
+//char RECORDS[]="A0001超敏CRP0001[  180119093625   ]U000000";
+#define RECADDR   0x0360
+char RECORDS[]="\x5A\xA5\x31\x82\x01\x60 A0001 超敏CRP0001[   180119093625   ] U000000";
+
 QueueHandle_t Com_Queue;                           //串口消息队列句柄
 QueueHandle_t Hmi_Queue;                           //HMI消息队列句柄
 QueueHandle_t Motion_Queue;                        //运动控制消息队列句柄
@@ -113,11 +134,19 @@ QueueHandle_t Motion_Queue;                        //运动控制消息队列句柄
 //QueueHandle_t Pump_Queue;                          //泵控制消息队列句柄   ??蠕动泵当做步进电机用，旋转泵当做阀用
 
 struct motion_state{
-    u8 motion_type;//运动类型：0，无运动；1，非阻塞运动；2，阻塞运动
+    u8 motion_type;//运动类型：0，无运动；1，非阻塞运动；2，阻塞运动；3，复位；4，暂停或取消
     u8 current_motion;//当前运动目标：'A'，复位运动；'S'，步进电机；'V'，阀；'R'，蠕动泵；'P'，旋转泵
+    //u8 suspend;//挂起
     u16 step_flag;//每一位代表一个步进电机开1或关0，只能一个是1??   蠕动泵归到步进电机中
     u16 valve_flag;//每一位代表一个阀开1或关0，可以多个1           旋转泵归到阀中
 }motion_state1;//??运动状态变量不锁
+
+struct record_inf{
+    u8 time[24];//时间
+    u8 serial[8];//序号
+    u8 number[8];//编号
+    u8 result[8];//结果
+}record_inf1;
 
 //互斥信号量句柄
 SemaphoreHandle_t MutexSemMotion;	//运动控制互斥信号量??只锁运动控制模块
@@ -127,7 +156,10 @@ u32 decodeCmd(u8 buf[],u8 len,u8 c[ ][2],u8 *n);
 u8 str_len(u8 *str);
 u8 exf_getfree(u8 *drv,u32 *total,u32 *free);
 u8 getDir(u8 * buf1,u8 * buf2,u8 pos);
+void KEY_Init(void);
 void MotionReset(void);
+void string_cpy(char * buf1,char * buf2,u8 len);
+u8 ReadRecords(char * tbuf,DIR * dir_a,u8 * l,u8 *m);
 
 FATFS fs;
 FIL file;                                          //文件
@@ -135,7 +167,7 @@ FIL file;                                          //文件
 FILINFO fileinfo;                                  //文件信息
 DIR dir;                                           //目录
 
-#define LEVEL             8                        //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
+#define LEVEL             2                        //LEVEL设置大小代表遍历的深度，8就代表8层，内存足够的话可以设置更大些
 #define WORKPATH          "0:/TEST"                //默认创建的工作目录0:/CRP
 #define WORKFILE          "setting"                //默认当前的文件
 #define MAXNAMELEN        32                       //文件名最长为32字节
@@ -145,6 +177,9 @@ FRESULT fres;
 u8 curDir[64]=WORKPATH;//??
 u8 curFilename[MAXNAMELEN]=WORKFILE;//??
 u32 curFileFlag=0;//0，没有打开；1，文件以读的方式打开；2，文件以写的方式打开
+
+u32 HMICurMenu=HMI_OTHER;
+u32 HMICurSubMenu;
 //------------------MAIN 开始------------------
 int main(void)
 {
@@ -158,6 +193,8 @@ int main(void)
     
     UART1_Init(115200);                            //串口1初始化波特率为115200，用于串口通讯
     USART3_Init(115200);                           //串口3初始化波特率为115200，用于HMI 通讯
+    
+    KEY_Init();
     
     TIM2_PWM_Init();                               //产生LED脉冲信号1120Hz PB11
     AD7799_Init(ADC_CON_GAIN1);                    //初始化AD7799,包含SPI2初始化//??频率选择，时序等..
@@ -192,6 +229,16 @@ int main(void)
     fileinfo.lfname = (TCHAR *)filename;           //为长文件名分配空间
     fileinfo.lfsize = MAXNAMELEN;                  //文件名长度不能超过32字节
 
+//char tbuf[64];
+//u8 m[2],l[2],res;
+//DIR dir_a[2];
+//strcpy(tbuf, WORKPATH);
+//m[0] = 0;
+//m[1] = 1;
+//do{
+//    res=ReadRecords(tbuf,dir_a,l,m);
+//} while((res==1)||(res==0));
+    
     //创建开始任务
     xTaskCreate((TaskFunction_t )start_task,             //任务函数
                 (const char*    )"start_task",           //任务名称
@@ -261,7 +308,7 @@ void start_task(void *pvParameters)
 //                (void*          )NULL,
 //                (UBaseType_t    )CRP_TASK_PRIO,
 //                (TaskHandle_t*  )&CRP_Task_Handler);
-                
+
     vTaskDelete(Start_Task_Handler);               //删除开始任务
     taskEXIT_CRITICAL();                           //退出临界区
 }
@@ -353,7 +400,7 @@ void com_task(void *pvParameters)
                                             sprintf((char *)tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//搜索到的文件或文件名连接成完整的路径
                                             if (fileinfo.fattrib & AM_DIR) {                   //是目录
                                                 printf("%s [%dD]\r\n", tbuf,j);                //打印目录
-                                                if (j<8) j++;                                  //下个循环进入子目录
+                                                if (j<LEVEL) j++;                              //下个循环进入子目录
                                             }else {
                                                 printf("%s [%dF]\r\n", tbuf,j);                //打印文件
                                                 tbuf[l[j-1]] = '\0';                           //存储的路径返回目录
@@ -535,6 +582,40 @@ void com_task(void *pvParameters)
                                     printf("当前没有运动目标\r\n");
                                 printf("步进电机状态：%#x\r\n",motion_state1.step_flag);
                                 printf("阀状态：%#x\r\n",motion_state1.valve_flag);
+
+                                switch(HMICurMenu){
+                                    case HMI_OTHER:
+                                        printf("HMI状态：HMI_OTHER\r\n");
+                                        break;
+                                    case HMI_INIT:
+                                        printf("HMI状态：HMI_INIT\r\n");
+                                        break;
+                                    case HMI_CHECK:
+                                        printf("HMI状态：HMI_CHECK\r\n");
+                                        break;
+                                    case HMI_TEST:
+                                        printf("HMI状态：HMI_TEST\r\n");
+                                        break;
+                                    case HMI_QUERY:
+                                        printf("HMI状态：HMI_QUERY\r\n");
+                                        break;
+                                    case HMI_QC:
+                                        printf("HMI状态：HMI_QC\r\n");
+                                        break;
+                                    case HMI_SET:
+                                        printf("HMI状态：HMI_SET\r\n");
+                                        break;
+                                    case HMI_SYS:
+                                        printf("HMI状态：HMI_SYS\r\n");
+                                        break;
+                                    case HMI_OFF:
+                                        printf("HMI状态：HMI_OFF\r\n");
+                                        break;
+                                    default:
+                                        printf("HMI状态错误！\r\n");
+                                        break;
+                                }
+
                                 break;
                             case 'V':
                                 if (c[i][1] == 4) {//查询阀状态  //设置阀开关//Vnnb
@@ -684,6 +765,40 @@ void com_task(void *pvParameters)
                                     printf("当前没有运动目标\r\n");
                                 printf("步进电机状态：%#x\r\n",motion_state1.step_flag);
                                 printf("阀状态：%#x\r\n",motion_state1.valve_flag);
+                                
+                                switch(HMICurMenu){
+                                    case HMI_OTHER:
+                                        printf("HMI状态：HMI_OTHER\r\n");
+                                        break;
+                                    case HMI_INIT:
+                                        printf("HMI状态：HMI_INIT\r\n");
+                                        break;
+                                    case HMI_CHECK:
+                                        printf("HMI状态：HMI_CHECK\r\n");
+                                        break;
+                                    case HMI_TEST:
+                                        printf("HMI状态：HMI_TEST\r\n");
+                                        break;
+                                    case HMI_QUERY:
+                                        printf("HMI状态：HMI_QUERY\r\n");
+                                        break;
+                                    case HMI_QC:
+                                        printf("HMI状态：HMI_QC\r\n");
+                                        break;
+                                    case HMI_SET:
+                                        printf("HMI状态：HMI_SET\r\n");
+                                        break;
+                                    case HMI_SYS:
+                                        printf("HMI状态：HMI_SYS\r\n");
+                                        break;
+                                    case HMI_OFF:
+                                        printf("HMI状态：HMI_OFF\r\n");
+                                        break;
+                                    default:
+                                        printf("HMI状态错误！\r\n");
+                                        break;
+                                }
+                                
                                 break;
                             case 'V':
                                 if (c[i][1] == 4) {//查询阀状态  //设置阀开关//Vnnb
@@ -728,7 +843,7 @@ void com_task(void *pvParameters)
                             case 'A'://复位运动
                                 memcpy(command,buffer+c[i][0], c[i][1]);
                                 //command[0]='A';
-                                command[1]='\0';
+                                command[c[i][1]]='\0';
                                 xQueueSend(Motion_Queue,command,10);//向Motion_Queue队列中发送数据
                                 break;
                             default:
@@ -765,9 +880,12 @@ void motion_task(void *pvParameters)
                         case 'A'://复位命令
                             motion_state1.motion_type=2;//阻塞运动()
                             motion_state1.current_motion='A';
-                            printf("复位命令:%s\r\n",buffer);
-                            //所有步进电机到起始位置，所有阀断电，柱塞泵要和阀配合，并加入必要的延时
-                            MotionReset();
+                        
+                            if(buffer[1]=='0') {
+                                printf("复位命令:%s\r\n",buffer);
+                                //所有步进电机到起始位置，所有阀断电，柱塞泵要和阀配合，并加入必要的延时
+                                MotionReset();
+                            }
                         
      //for(num=0;num<5;num++) printf("StepMotor[%d].stage=%d\r\n",num,StepMotor[num].stage);
      //for(num=0;num<5;num++) printf("StepMotor[%d].pot=%d\r\n",num,StepMotor[num].pot);
@@ -874,44 +992,39 @@ void motion_task(void *pvParameters)
     }
 }
 
-//hmi_task任务函数 
+//hmi_task任务函数 需要快速相应HMI命令，不能有长时间等待(除了起始的复位)，由命令驱动
 void hmi_task(void *pvParameters)
 {//uart3通讯
     u8 buffer[HMI_REC_LEN];
     BaseType_t res;
     u8 year,month,date,week;
-    u8 hour,min,sec,i;//time_valid;//,ampm;
-    //u32 sum;
+    u8 hour,min,sec;//,i;//time_valid;//,ampm;
+    //u32 tempState;
     
-    u32 PreviousState = HMI_OTHER;
-    u32 CurrentState  = HMI_OTHER;
-    u32 NextState     = HMI_OTHER;
+    u16 mem_addr,mem_data;
+    
+    u8 query_cnt=0;//查询到的记录数量
+    u8 query_mod=0;//查询方式：0，全部；1，按编号列出，2，按时间列出
+    u8 query_ref=0;//0表示还没有刷新,1不是已经刷新
+
+    char tbuf[32];
+    //char hbuf[32];
+    u16 addr;
+    u8 m[2],l[2],re;
+    DIR dir_a[2];
+
+    //vTaskDelay(pdMS_TO_TICKS(100));//??至少保证100  //??打印pdMS_TO_TICKS看看是不是实际值
     
     while(1) {
         if(Hmi_Queue!=NULL) {//获取HMI传来的信息
             memset(buffer,0,HMI_REC_LEN);    //清除缓冲区
             res=xQueueReceive(Hmi_Queue,buffer,10);//portMAX_DELAY ??延时0还是其它
             if(res == pdTRUE) {//HMI命令解析
-                printf("%s",buffer);
-                //Uart3_PutString("page start", sizeof("page start")-1);
-            }
-        }
-        
-        switch(CurrentState) {
-            case HMI_INIT://完成电机，阀，泵的复位和初始化，读取 ，光电信号（光隔和红光）测试
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-                    vTaskDelay(pdMS_TO_TICKS(100));//??至少保证100  //??打印pdMS_TO_TICKS看看是不是实际值
-                    i=0;
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-                    //需要完成：从HMI读取当前时间赋值给RTC
-                    //1：从HMI读取当前时间赋值给RTC
-                    if(i == 0){
+                //printf("%s",buffer);
 
-                        Uart3_PutString("\x5A\xA5\x03\x81\x20\x07", 6);//5A A5 03 81 20 07 读取RTC
-                        memset(buffer,0,HMI_REC_LEN);
-                        i++;
-                    } else if(i < 10){
-                        if((res == pdTRUE) && (buffer[1] == 0x20)){//收到有效数据
+                switch(buffer[0]) {
+                    case READ_RES://读取寄存器内容
+                        if(buffer[1] == RTC_NOW) {
                             
                             year  = ((buffer[3] >> 4 ) & 0x0f)* 10 + (buffer[3] & 0x0f);
                             month = ((buffer[4] >> 4 ) & 0x0f)* 10 + (buffer[4] & 0x0f);
@@ -920,7 +1033,6 @@ void hmi_task(void *pvParameters)
                             hour  = ((buffer[7] >> 4 ) & 0x0f)* 10 + (buffer[7] & 0x0f);
                             min   = ((buffer[8] >> 4 ) & 0x0f)* 10 + (buffer[8] & 0x0f);
                             sec   = ((buffer[9] >> 4 ) & 0x0f)* 10 + (buffer[9] & 0x0f);
-
                             //printf("time_valid:%d\r\n",time_valid);
                             printf("\r\n时间有效20%02d/%02d/%02d Week:%d %02d:%02d:%02d\r\n",year,month,date,week,hour,min,sec);//??怎么到了这
                             //year=CorrectYear(year);
@@ -932,103 +1044,129 @@ void hmi_task(void *pvParameters)
                             else
                                 RTC_Set_Time(hour,min,sec,RTC_H12_PM);    //设置时间
                             RTC_Set_Date(year,month,date,week);    //设置日期
-
-                            //start_cnt=10;
-                            NextState = HMI_CMD;
-                        } else {//无数据
-                            i++;
                         }
-                    } else {
-                        //显示读取时间失败
-                        printf("\r\n没有读到时间\r\n");
-
-                        NextState = HMI_CMD;
-                    }
-                    vTaskDelay(pdMS_TO_TICKS(20));//至少保证20 的HMI反馈时间
-                    //printf("start_cnt:%d\r\n",start_cnt);
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-                    if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
-                    //运动模块互斥访问
-                                        
-                        motion_state1.motion_type=2;//阻塞运动
-                        motion_state1.current_motion='A';
-                                        
-                        MotionReset();
-     //for(i=0;i<5;i++) printf("StepMotor[%d].stage=%d\r\n",i,StepMotor[i].stage);
-     //for(i=0;i<5;i++) printf("StepMotor[%d].pot=%d\r\n",i,StepMotor[i].pot);
-     //for(i=0;i<5;i++) printf("StepMotor[%d].dist=%d\r\n",i,StepMotor[i].dist);
-                        motion_state1.motion_type=0;//无运动 
-                        motion_state1.current_motion=0;//无运动目标
-                        
-                        xSemaphoreGive( MutexSemMotion );//释放互斥信号量
-                    } else printf("com_task[V]没有获得互斥信号量\r\n");
-
-                    vTaskDelay(pdMS_TO_TICKS(2000));//至少保证10
-                STATE_END                                                       //} break;
-            case HMI_CMD:
-                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-                STATE_END                                                       //} break;
-//           case HMI_ANALY:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-//           case HMI_QUERY:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-//           case HMI_QC:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-//           case HMI_SET:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-//           case HMI_SYS:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-//           case HMI_OFF:
-//                STATE_ENTRY_ACTION                                              //if ( CurrentState != PreviousState ) { PreviousState = CurrentState;
-
-//                STATE_TRANSITION_TEST                                           //} if ( NextState == CurrentState ) {
-
-//                STATE_EXIT_ACTION                                               //} if ( NextState != CurrentState ) { CurrentState = NextState;
-
-//                STATE_END                                                       //} break;
-           case HMI_OTHER:
-           default:
-                vTaskDelay(pdMS_TO_TICKS(2000));//??
-                CurrentState = HMI_INIT;
-                NextState    = HMI_INIT;
-                
-                break;
+                        break;
+                    case READ_MEM://读取变量存储器内容
+                        mem_addr = buffer[1]*256+buffer[2];
+                        mem_data = buffer[4]*256+buffer[5];
+                        switch(mem_addr) {
+                            case MENU1://改变菜单
+                                switch(mem_data) {
+                                    case MENU1_ANALY:
+                                        HMICurMenu = HMI_TEST;
+                                        break;
+                                    case MENU1_QUERY:
+                                        HMICurMenu = HMI_QUERY;
+                                        break;
+                                    case MENU1_QC:
+                                        HMICurMenu = HMI_QC;
+                                        break;
+                                    case MENU1_SET:
+                                        HMICurMenu = HMI_SET;
+                                        break;
+                                    case MENU1_SYS:
+                                        HMICurMenu = HMI_SYS;
+                                        break;
+                                    case MENU1_OFF:
+                                        HMICurMenu = HMI_OFF;
+                                        break;
+                                }
+                                break;
+                        }
+                        break;
+                }
+            }
         }
+        
+        switch(HMICurMenu) {
+            case HMI_OTHER:
+                Uart3_PutString(ReadRTC,ReadRTCLen);//5A A5 03 81 20 07 读取RTC 目的是更新控制器内部时钟
+                HMICurMenu=HMI_INIT;
+                break;
+            case HMI_INIT://此处再用阻塞方式执行复位功能
+                //完成电机，阀，泵的复位和初始化，读取 ，光电信号（光隔和红光）测试    ??放在这??
+                //复位运动    ??放在这??
+                if( xSemaphoreTake( MutexSemMotion, pdMS_TO_TICKS(10) ) == pdTRUE ) { //已经获得信号量并且现在可以访问运动模块
+                //运动模块互斥访问
+                                        
+                    motion_state1.motion_type=2;//阻塞运动
+                    motion_state1.current_motion='A';
+                                        
+                    MotionReset();
+
+                    motion_state1.motion_type=0;//无运动 
+                    motion_state1.current_motion=0;//无运动目标
+                        
+                    xSemaphoreGive( MutexSemMotion );//释放互斥信号量
+                } else printf("HMI_task没有获得互斥信号量\r\n");
+
+                Uart3_PutString(ToPageN,ToPageNLen);//5A A5 04 80 03 00 01  页面切换切到1号页面
+                HMICurMenu=HMI_TEST;
+                break;
+            case HMI_CHECK:
+                break;
+            case HMI_TEST:
+                if(motion_state1.motion_type==0) {//无运动 
+                    if(GPIO_ReadInputDataBit(GPIOE, GPIO_Pin_11)==Bit_RESET) {//启动信号为低开始测试
+                        vTaskDelay(pdMS_TO_TICKS(10));//至少保证10
+                        if(GPIO_ReadInputDataBit(GPIOE, GPIO_Pin_11)==Bit_RESET) {
+                            printf("启动测试\r\n");
+                            Uart3_PutString("\x5A\xA5\x0D\x82\x01\x60\x31\x32\x33\x34\x35\x36\x37\x38\x30\x31",16);//改变量
+                            Uart3_PutString("\x5A\xA5\x0E\x84\x01\x00\x64\x00\x32\x01\x00\x00\x50\x02\x00\x00\x64",17);//画波形
+                            buffer[0]='A';
+                            buffer[1]='1';
+                            buffer[2]='\0';
+                            xQueueSend(Motion_Queue,buffer,10);//向Motion_Queue队列中发送数据
+                        }
+                    }
+                }
+                break;
+            case HMI_QUERY:
+                //读取文件
+                if (query_ref==0) {//还没刷新
+                    query_cnt = 0;
+                    switch(query_mod) {
+                        case 0://全部显示
+                            strcpy(tbuf, WORKPATH);
+                            m[0] = 0;
+                            m[1] = 1;
+                            //addr = RECADDR;
+                            do{
+                                re=ReadRecords(tbuf,dir_a,l,m);
+                                if(re==0) {//char RECORDS[]="\x5A\xA5\x31\x82\x01\x60 A0001 超敏CRP0001[   180119093625   ] U000000"
+                                    addr=RECADDR+query_cnt*46;
+                                    RECORDS[4]=*((char *)(&addr)+1);
+                                    RECORDS[5]=*((char *)(&addr)+0);
+                                    string_cpy(RECORDS+7,(char *)record_inf1.serial,5);
+                                    string_cpy(RECORDS+20,(char *)record_inf1.number,4);
+                                    string_cpy(RECORDS+28,(char *)record_inf1.time,12);
+                                    string_cpy(RECORDS+45,(char *)record_inf1.result,7);
+                                    Uart3_PutString(RECORDS,sizeof(RECORDS)-1);
+                                    query_cnt++;
+                                    if(query_cnt>=9) break;
+                                }
+                            } while((re==1)||(re==0));
+                            break;
+                    }
+                    query_ref=1;
+                }
+                break;
+            case HMI_QC:
+                break;
+            case HMI_SET:
+                break;
+            case HMI_SYS:
+                break;
+            case HMI_OFF:
+                break;
+            
+        }
+
+
+//                    Uart3_PutString("\x5A\xA5\x04\x80\x03\x00\x01", 7);//5A A5 04 80 03 00 01  页面切换切到1号页面
+
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -1214,67 +1352,166 @@ u8 exf_getfree(u8 *drv,u32 *total,u32 *free)
     return res;
 }
 
-//void LED_Init(void)
-//{    	 
-//    GPIO_InitTypeDef  GPIO_InitStructure;
+void KEY_Init(void)
+{    	 
+    GPIO_InitTypeDef  GPIO_InitStructure;
 
-//    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);//使能GPIOC时钟
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE, ENABLE);//使能GPIOE时钟
 
-//    //GPIOC6,F7初始化设置
-//    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;//LED0和LED1对应IO口
-//    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//普通输出模式
-//    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
-//    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
-//    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
-//    GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化GPIOC
-//	
-//	GPIO_SetBits(GPIOC,GPIO_Pin_6 | GPIO_Pin_7);//GPIOC6,F7设置高
+    //GPIOE11初始化设置
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;//
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;//普通输入模式
+    //GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
+    GPIO_Init(GPIOE, &GPIO_InitStructure);//初始化GPIOE
+	
+}
 
-//}
+
 void MotionReset(void)
 {
     u32 sum,i;
-                        printf("打开阀#5\r\n");//为了使注射器2推挤有通路
-                        motion_state1.valve_flag |= 1<<(5-1);
-                        printf("阀状态:%#x\r\n",motion_state1.valve_flag);
-                        SwitchOut(motion_state1.valve_flag);
-                                        
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                        
-                        motion_state1.current_motion='S';
-                        
-                        for(i=0;i<5;i++) {
-                            StepMotor[i].stage=3;//所有电机运动状态为3停止
-                        }
-                        
-                        motion_state1.step_flag = (1<<0);
-                        sum=StepMotoMove(0,0,1600,0);//??到限位位置4000步够吗
-                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[0].Size[1]*(*StepMotor[0].Buf[1]))/1000));
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                        if (IsLmt(0)==0) printf("步进电机0故障\r\n");
-                        
-                        motion_state1.step_flag = (1<<1);
-                        sum=StepMotoMove(1,0,-2400,0);//??到限位位置4000步够吗
-                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[1].Size[1]*(*StepMotor[1].Buf[1]))/1000));
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                        if (IsLmt(1)==0) printf("步进电机1故障\r\n");
-                        
-                        motion_state1.step_flag = (1<<2);
-                        sum=StepMotoMove(2,0,-2400,0);//??到限位位置4000步够吗
-                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[2].Size[1]*(*StepMotor[2].Buf[1]))/1000));
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                        if (IsLmt(2)==0) printf("步进电机2故障\r\n");
-                        
-                        motion_state1.step_flag = (1<<3);
-                        sum=StepMotoMove(3,0,-2400,0);//??到限位位置4000步够吗
-                        vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[3].Size[1]*(*StepMotor[3].Buf[1]))/1000));
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                        if (IsLmt(3)==0) printf("步进电机3故障\r\n");
-                        
-                        vTaskDelay(pdMS_TO_TICKS(200));
 
-                        printf("关闭所有阀\r\n");
-                        motion_state1.valve_flag=0;
-                        printf("阀状态:%#x\r\n",motion_state1.valve_flag);
-                        SwitchOut(motion_state1.valve_flag);
+    printf("打开阀#5\r\n");//为了使注射器2推挤有通路
+    motion_state1.valve_flag |= 1<<(5-1);
+    printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+    SwitchOut(motion_state1.valve_flag);
+                    
+    vTaskDelay(pdMS_TO_TICKS(200));
+    
+    motion_state1.current_motion='S';
+    
+    for(i=0;i<5;i++) {
+        StepMotor[i].stage=3;//所有电机运动状态为3停止
+    }
+    
+    motion_state1.step_flag = (1<<0);
+    sum=StepMotoMove(0,0,1600,0);//??到限位位置4000步够吗
+    vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[0].Size[1]*(*StepMotor[0].Buf[1]))/1000));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (IsLmt(0)==0) printf("步进电机0故障\r\n");
+    
+    motion_state1.step_flag = (1<<1);
+    sum=StepMotoMove(1,0,-2400,0);//??到限位位置4000步够吗
+    vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[1].Size[1]*(*StepMotor[1].Buf[1]))/1000));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (IsLmt(1)==0) printf("步进电机1故障\r\n");
+    
+    motion_state1.step_flag = (1<<2);
+    sum=StepMotoMove(2,0,-2400,0);//??到限位位置4000步够吗
+    vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[2].Size[1]*(*StepMotor[2].Buf[1]))/1000));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (IsLmt(2)==0) printf("步进电机2故障\r\n");
+    
+    motion_state1.step_flag = (1<<3);
+    sum=StepMotoMove(3,0,-2400,0);//??到限位位置4000步够吗
+    vTaskDelay(pdMS_TO_TICKS((sum*2+StepMotor[3].Size[1]*(*StepMotor[3].Buf[1]))/1000));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (IsLmt(3)==0) printf("步进电机3故障\r\n");
+    
+    motion_state1.step_flag = 0;
+    
+AllSleep();//休眠
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    printf("关闭所有阀\r\n");
+    motion_state1.valve_flag=0;
+    printf("阀状态:%#x\r\n",motion_state1.valve_flag);
+    SwitchOut(motion_state1.valve_flag);
+}
+
+u8 string_cmp(char * buf1,char * buf2,u8 len)
+{
+    u8 i;
+    for(i=0;i<len;i++) {
+        if(buf1[i] != buf2[i]) return 0;
+    }
+    return 1;
+}
+
+void string_cpy(char * buf1,char * buf2,u8 len)
+{
+    u8 i;
+    for(i=0;i<len;i++) buf1[i] = buf2[i];
+}
+
+u8 ReadRecords(char * tbuf,DIR * dir_a,u8 * l,u8 *m)
+{//res=0，成功；1，搜索中；2，结束；3，错误
+    char namebuf[16];
+    char sbuf[32];//64
+    u8 flag;
+    u8 res = 1;
+    if((m[1]!=1)&&(m[1]!=2)) return 3;//失败
+    if ( m[1] > m[0] ) {                                        //只有搜索子目录时才执行
+        f_opendir(&dir_a[m[1]-1], tbuf);
+        l[m[1]-1] = strlen(tbuf);
+    }
+    m[0] = m[1];
+    f_readdir(&dir_a[m[1]-1], &fileinfo);                       //读取目录下的一个文件
+    if (fileinfo.fname[0] == 0) {                               //到末尾了,退出 //错误了/fres != FR_OK || 
+        if (m[1]==2){                                           //是子目录下个循环进入工作目录
+            m[1]=1; 
+            tbuf[l[0]] = '\0';                                  //存储的路径返回工作目录
+            res=1;
+        }
+        else res=2;
+    } else {
+        sprintf(tbuf,"%s/%s",tbuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//搜索到的文件或文件名连接成完整的路径
+        if (fileinfo.fattrib & AM_DIR) {                        //是目录
+            if(m[1]==1) {
+                strcpy(namebuf,*fileinfo.lfname ? fileinfo.lfname : fileinfo.fname);//得到目录
+                if(strlen(namebuf) == 8) m[1]=2;                //目录长度是8且当前是工作目录，下个循环进入子目录
+            }
+        }else {
+            //printf("%s [%dF]\r\n", tbuf,m[1]);                //打印文件
+            if(m[1]==2) {                                       //当前在某个时间目录下
+                fres = f_open(&file, (const TCHAR*)tbuf, FA_OPEN_EXISTING | FA_READ);
+                if(fres == FR_OK) {//FR_OK 打开文件成功  ??文件不存在呢
+                    //printf("文件内容:->\r\n");
+                    flag=0;
+                    do{
+                        if(f_gets(sbuf,32,&file) != 0) {//读取一行 ??\n会变成\0吗 \r怎么办??
+                            //printf("%s", tbuf);
+                            switch(sbuf[0]) {
+                                case 'A'://序号
+                                    if(string_cmp(&sbuf[2],&tbuf[l[0]+1+8+1],5)) {
+                                        string_cpy((char *)record_inf1.serial,&sbuf[2],5);
+                                        record_inf1.serial[5] = '\0';
+                                        flag |= 1;
+                                    }
+                                    break;
+                                case 'B'://编号
+                                    if(string_cmp(&sbuf[2],&tbuf[l[0]+1+8+1+5],4)) {
+                                        string_cpy((char *)record_inf1.number,&sbuf[2],4);
+                                        record_inf1.number[4] = '\0';
+                                        flag |= 2;
+                                    }
+                                    break;
+                                case 'I'://时间
+                                    if(string_cmp(&sbuf[2],&tbuf[l[0]+1+2],6)) {
+                                        string_cpy((char *)record_inf1.time,&sbuf[2],12);
+                                        record_inf1.time[12] = '\0';
+                                        flag |= 4;
+                                    }
+                                    break;
+                            }
+                        }
+                        if(flag==7) {
+                            string_cpy((char *)record_inf1.result,&tbuf[l[0]+1+8+1+5+4],7);
+                            record_inf1.result[7] = '\0';
+                            res=0;
+                            break;//读到需要的退出
+                        }
+                    }while ((!f_eof(&file))&&(!f_error(&file)));//??没有结束且没有发生错误
+                    fres=f_close(&file);
+                } else if (fres == FR_NO_FILE){
+                    printf("文件不存在\r\n");
+                }
+                tbuf[l[1]] = '\0';                              //存储的路径返回目录
+                //res = 0;
+            }
+        }
+    }
+    return res;
 }
